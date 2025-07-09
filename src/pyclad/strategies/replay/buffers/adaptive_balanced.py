@@ -19,6 +19,8 @@ class AdaptiveBalancedReplayBuffer(ReplayBuffer):
         # resize buffers
         new_single_buffer_size = math.floor(self._max_size / len(self._buffers))
         self._buffers = [self._selection_method.select(buffer, new_single_buffer_size) for buffer in self._buffers]
+        # get current size and print
+        current_size = sum(len(buffer) for buffer in self._buffers)
 
     def data(self) -> np.ndarray:
         return np.concatenate(self._buffers) if len(self._buffers) > 0 else np.array([])
