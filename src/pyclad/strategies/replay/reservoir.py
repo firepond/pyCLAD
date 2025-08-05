@@ -12,6 +12,8 @@ from pyclad.strategies.strategy import (
     ConceptIncrementalStrategy,
 )
 
+# from micro_watch import micro_watch
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,10 +33,10 @@ class ReservoirSamplingStrategy(ConceptIncrementalStrategy, ConceptAwareStrategy
                 self.buffer_size += 1
             else:
                 # replace a random sample in the buffer with the new sample
-                index = np.random.randint(0, self.max_buffer_size)
+                index = int(np.random.randint(0, self.max_buffer_size))
                 self._replay[index] = sample
 
-    def learn(self, data: np.ndarray, *args, **kwargs) -> None:
+    def learn(self, data: np.ndarray, *_args, **_kwargs) -> None:
         """Learn from the data and store it in the replay buffer."""
         self.update(data)
         # concatenate the replay buffer and fit the model
@@ -45,14 +47,14 @@ class ReservoirSamplingStrategy(ConceptIncrementalStrategy, ConceptAwareStrategy
         # fit the model on the concatenated replay buffer
         self._model.fit(replay)
 
-    def predict(self, data: np.ndarray, *args, **kwargs) -> (np.ndarray, np.ndarray):
+    def predict(self, data: np.ndarray, *_args, **_kwargs) -> tuple[np.ndarray, np.ndarray]:
         return self._model.predict(data)
 
     def name(self) -> str:
         return "ReservoirSampling"
 
     def additional_info(self) -> Dict:
-        return {"model": self._model.name(), "buffer_size": len(np.concatenate(self._replay))}
+        return {"model": self._model.name(), "buffer_size": len(self._replay)}
 
 
 def calculate_lof_entropy(lof_scores, bins=20):
@@ -69,7 +71,7 @@ def calculate_lof_entropy(lof_scores, bins=20):
     """
     # 1. Create a histogram of the LOF scores. This gives us the count
     #    of scores falling into each bin (a discrete distribution).
-    counts, bin_edges = np.histogram(lof_scores, bins=bins, density=False)
+    counts, _ = np.histogram(lof_scores, bins=bins, density=False)
 
     # 2. Convert the counts into probabilities by dividing by the total number of scores.
     #    This gives us the probability distribution p(x).
@@ -112,7 +114,8 @@ class BalancedReservoirSamplingStrategy(ConceptIncrementalStrategy, ConceptAware
                 if buffer.shape[0] > 0:
                     # complexity_value = np.var(buffer)
                     var_value = np.var(buffer)
-                    entropy_value = calculate_lof_entropy(buffer)
+                    # Note: entropy calculation available but not currently used
+                    # entropy_value = calculate_lof_entropy(buffer)
                     # calculate the complexity as a combination of variance and entropy, mean
                     complexity_value = var_value
                     complexity.append(complexity_value)
@@ -232,13 +235,13 @@ class BalancedReservoirSamplingStrategy(ConceptIncrementalStrategy, ConceptAware
 
         return buffer[subsample_indices]
 
-    def learn(self, data: np.ndarray, *args, **kwargs) -> None:
+    def learn(self, data: np.ndarray, *_args, **_kwargs) -> None:
         replay = np.concatenate(self._replay) if len(self._replay) > 0 else np.empty((0, data.shape[1]))
 
         self._model.fit(np.concatenate([replay, data]) if replay.shape[0] > 0 else data)
         self.update(data)
 
-    def predict(self, data: np.ndarray, *args, **kwargs) -> tuple[np.ndarray, np.ndarray]:
+    def predict(self, data: np.ndarray, *_args, **_kwargs) -> tuple[np.ndarray, np.ndarray]:
         return self._model.predict(data)
 
     def additional_info(self) -> Dict:
