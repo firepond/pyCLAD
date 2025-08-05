@@ -96,7 +96,9 @@ def chebyshev_min(u: np.ndarray, v: np.ndarray) -> float:
     return np.min(np.abs(u - v))
 
 
-class WatchStrategy(ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgnosticStrategy):
+class WatchStrategy(
+    ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgnosticStrategy
+):
     """
     WATCH-based reservoir sampling strategy for lifelong anomaly detection.
 
@@ -106,7 +108,9 @@ class WatchStrategy(ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgn
     This prevents catastrophic forgetting by maintaining a balanced view of past data.
     """
 
-    def __init__(self, model: Model, max_buffer_size: int = 1000, threshold_ratio: float = 0.51):
+    def __init__(
+        self, model: Model, max_buffer_size: int = 1000, threshold_ratio: float = 0.51
+    ):
         """
         Initialize the WATCH strategy.
 
@@ -231,11 +235,11 @@ class WatchStrategy(ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgn
         if self._should_create_new_regime(best_distance):
             # Create a new regime if the distance is above threshold
             self._replay.append(new_regime)
-            logger.info("New regime added: %s", new_regime)
+            logger.debug("New regime added: %s", new_regime)
         else:
             # Update the existing regime with the new data
             self._replay[best_index].add_samples(new_regime.get_samples())
-            logger.info("Regime updated: %s", self._replay[best_index])
+            logger.debug("Regime updated: %s", self._replay[best_index])
 
         # Update current size
         self.current_size = sum(regime.r_count for regime in self._replay)
@@ -267,7 +271,9 @@ class WatchStrategy(ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgn
         # Update the replay buffer
         self.update(data)
 
-    def predict(self, data: np.ndarray, *_args, **_kwargs) -> Tuple[np.ndarray, np.ndarray]:
+    def predict(
+        self, data: np.ndarray, *_args, **_kwargs
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Make predictions on the data.
 

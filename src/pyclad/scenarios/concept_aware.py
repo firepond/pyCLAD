@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class ConceptAwareScenario:
-    def __init__(self, dataset: ConceptsDataset, strategy: ConceptAwareStrategy, callbacks: List[Callback]):
+    def __init__(
+        self,
+        dataset: ConceptsDataset,
+        strategy: ConceptAwareStrategy,
+        callbacks: List[Callback],
+    ):
         self._dataset = dataset
         self._strategy = strategy
         self._callbacks = callbacks
@@ -20,7 +25,7 @@ class ConceptAwareScenario:
         callback_composite.before_scenario()
 
         for train_concept in self._dataset.train_concepts():
-            logger.info(f"Starting training on concept {train_concept.name}")
+            logger.debug(f"Starting training on concept {train_concept.name}")
             callback_composite.before_concept_processing(concept=train_concept)
             callback_composite.before_training()
 
@@ -29,7 +34,7 @@ class ConceptAwareScenario:
             callback_composite.after_training(learned_concept=train_concept)
 
             for test_concept in self._dataset.test_concepts():
-                logger.info(f"Starting evaluation of concept {test_concept.name}")
+                logger.debug(f"Starting evaluation of concept {test_concept.name}")
                 callback_composite.before_evaluation()
                 y_predicted, anomaly_scores = self._strategy.predict(
                     data=test_concept.data, concept_id=test_concept.name
