@@ -96,6 +96,29 @@ def chebyshev_min(u: np.ndarray, v: np.ndarray) -> float:
     return np.min(np.abs(u - v))
 
 
+def manhattan(u: np.ndarray, v: np.ndarray) -> float:
+    return np.sum(np.abs(u - v))
+
+
+def acc(u, v):
+    # the acc distance
+    return (manhattan(u, v) + chebyshev_min(u, v)) / 2
+
+
+def euclidean(u: np.ndarray, v: np.ndarray) -> float:
+    """
+    Calculate the Euclidean distance between two arrays.
+
+    Args:
+        u (np.ndarray): First array.
+        v (np.ndarray): Second array.
+
+    Returns:
+        float: Euclidean distance.
+    """
+    return np.linalg.norm(u - v)
+
+
 class WatchStrategy(
     ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgnosticStrategy
 ):
@@ -109,7 +132,7 @@ class WatchStrategy(
     """
 
     def __init__(
-        self, model: Model, max_buffer_size: int = 1000, threshold_ratio: float = 0.51
+        self, model: Model, max_buffer_size: int = 1000, threshold_ratio: float = 0.1
     ):
         """
         Initialize the WATCH strategy.
@@ -123,7 +146,18 @@ class WatchStrategy(
         self._model = model
         self.max_buffer_size = max_buffer_size
         self.current_size = 0
-        self.threshold = threshold_ratio
+        self.threshold_ratio = threshold_ratio  # multiplier for the threshold ratio
+
+        self.cur_threshold = threshold_ratio
+
+        self.past_distances = []
+        # best matching distances of all past regimes,
+        # used to calculate the current threshold,
+        # so 90 percentile of the past distances are greater than the current threshold
+
+        self.mean = None  # mean of all past regimes
+        self.sum = None  # sum of all past regimes
+        self.count = 0  # count of all past regimes
 
     def _calculate_distance(self, regime1: Regime, regime2: Regime) -> float:
         """
@@ -136,7 +170,10 @@ class WatchStrategy(
         Returns:
             float: Distance between the regimes.
         """
-        distance = chebyshev_min(regime1.get_samples(), regime2.get_mean())
+        # distance = chebyshev_min(regime1.get_samples(), regime2.get_mean())
+        # distance = acc(regime1.get_samples(), regime2.get_mean())
+        # Use Euclidean distance for regime comparison
+        distance = euclidean(regime1.get_mean(), regime2.get_mean())
         # Alternative: Mahalanobis distance
         # distance = mahalanobis_batch_to_dist(regime1.get_samples(), regime2.get_samples())
         return distance
@@ -175,7 +212,7 @@ class WatchStrategy(
         Returns:
             bool: True if a new regime should be created.
         """
-        return distance > self.threshold
+        return distance > self.cur_threshold
 
     def _update_regime_size_limits(self) -> None:
         """Update regime sizes to fit within the buffer limit."""
@@ -227,25 +264,65 @@ class WatchStrategy(
             # If there are no regimes, add the new regime
             self._replay.append(new_regime)
             self.current_size += data.shape[0]
+            # print("Initial regime added")
             return
 
         # Find the best matching regime
         best_distance, best_index = self._find_best_matching_regime(new_regime)
+        self.past_distances.append(best_distance)
 
-        if self._should_create_new_regime(best_distance):
-            # Create a new regime if the distance is above threshold
+        # Calculate the current threshold based on past distances
+        if len(self.past_distances) > 3:
+            # Use the 90th percentile of past distances to set the threshold
+            percent = np.percentile(self.past_distances, 90)
+            # if percent is not a scalar, take the first element
+            if isinstance(percent, np.ndarray):
+                print(
+                    "Percentile is not a scalar, taking the first element. Percentile shape:",
+                    percent.shape,
+                )
+                percent = percent[0]
+            if percent == 0:
+                # self.cur_threshold = 0%.6f", self.cur_threshold)
+                pass
+            else:
+                self.cur_threshold = percent * self.threshold_ratio
+
+        # print cur threshold
+        # print(f"Current threshold: {self.cur_threshold:.6f}")
+        # should create a new regime if the distance is above the threshold or only 2 regimes exist
+        if self._should_create_new_regime(best_distance) or len(self._replay) < 2:
+            # Create a new regime if the distance is above the threshold
             self._replay.append(new_regime)
-            logger.debug("New regime added: %s", new_regime)
+            # print("New regime added")
         else:
             # Update the existing regime with the new data
             self._replay[best_index].add_samples(new_regime.get_samples())
-            logger.debug("Regime updated: %s", self._replay[best_index])
+            # print("Regime updated")
 
         # Update current size
-        self.current_size = sum(regime.r_count for regime in self._replay)
+        # self.current_size = sum(regime.r_count for regime in self._replay)
 
         # Manage buffer size limits
         self._update_regime_size_limits()
+        # update the mean, sum and count for the threshold calculation
+        # self.sum = (
+        #     np.sum(data, axis=0)
+        #     if self.sum is None
+        #     else self.sum + np.sum(data, axis=0)
+        # )
+        # self.count += data.shape[0]
+        # self.mean = self.sum / self.count if self.count > 0 else 0
+        # # assert  self.mean is ndarray
+        # if type(self.mean) is not np.ndarray:
+        #     self.mean = np.array(self.mean)
+        # dist = chebyshev_min(self.mean, new_regime.get_mean())
+        # if dist > self.max_distance:
+        #     self.max_distance = dist
+        #     print("New maximum distance found: %.2f", self.max_distance)
+        # # Update the current threshold based on the maximum distance
+        # if self.max_distance > 0:
+        #     self.cur_threshold = self.threshold_ratio * self.max_distance
 
     def learn(self, data: np.ndarray, *_args, **_kwargs) -> None:
         """
@@ -304,5 +381,5 @@ class WatchStrategy(
             "buffer_size": self.max_buffer_size,
             "current_size": self.current_size,
             "num_regimes": len(self._replay),
-            "threshold": self.threshold,
+            "threshold": self.threshold_ratio,
         }
