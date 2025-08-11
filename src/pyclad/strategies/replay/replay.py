@@ -30,13 +30,21 @@ class ReplayOnlyStrategy(ConceptIncrementalStrategy, ConceptAwareStrategy):
         return {"replay_buffer": self._buffer.info()}
 
 
-class ReplayEnhancedStrategy(ConceptAgnosticStrategy, ConceptIncrementalStrategy, ConceptAwareStrategy):
+class ReplayEnhancedStrategy(
+    ConceptAgnosticStrategy, ConceptIncrementalStrategy, ConceptAwareStrategy
+):
     def __init__(self, model: Model, buffer: ReplayBuffer):
         self._model = model
         self._buffer = buffer
 
     def learn(self, data: np.ndarray, **kwargs) -> None:
-        self._model.fit(np.concatenate([self._buffer.data(), data]) if len(self._buffer.data()) > 0 else data)
+        combined_data = (
+            np.concatenate([self._buffer.data(), data])
+            if len(self._buffer.data()) > 0
+            else data
+        )
+        print(f"Fitting model on combined data of shape: {combined_data.shape}")
+        self._model.fit(combined_data)
         self._buffer.update(data)
 
     def predict(self, data: np.ndarray, **kwargs) -> (np.ndarray, np.ndarray):

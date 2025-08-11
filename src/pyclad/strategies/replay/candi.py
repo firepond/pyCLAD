@@ -1,8 +1,7 @@
 """
-WATCH-based Reservoir Sampling Strategy for Lifelong Anomaly Detection.
+CANDI (Continual ANomaly Detection for Iot): WATCH-based Reservoir Sampling Strategy for Lifelong Anomaly Detection.
 
-This module implements a concept-aware strategy that uses WATCH (Windowed Adaptive
-Test for Change) to detect regime changes and maintain a balanced reservoir of samples
+This module implements a concept-aware strategy that uses WATCH to detect regime changes and maintain a balanced reservoir of samples
 from different regimes to prevent catastrophic forgetting.
 """
 
@@ -47,6 +46,18 @@ class Regime:
         self.r_mean = samples.mean(axis=0)  # Mean of the current regime
         self.r_count = samples.shape[0]  # Number of samples in the current regime
 
+    def recalculate_mean(self):
+        """Recalculates the mean from the samples."""
+        if self.r_count > 0:
+            self.r_mean = self.r_samples.mean(axis=0)
+        else:
+            # Handle case with no samples, perhaps by setting mean to an empty array or zero
+            # Assuming r_samples has a defined dimension, even if empty
+            if self.r_samples.ndim > 1 and self.r_samples.shape[1] > 0:
+                self.r_mean = np.zeros(self.r_samples.shape[1])
+            else:
+                self.r_mean = np.array([])
+
     def __repr__(self) -> str:
         return f"Regime(mean={self.r_mean}, count={self.r_count})"
 
@@ -73,9 +84,19 @@ class Regime:
         if new_samples.ndim != 2:
             raise ValueError("New samples must be a 2D array.")
 
-        self.r_samples = np.vstack([self.r_samples, new_samples])
-        self.r_count = self.r_samples.shape[0]
-        self.r_mean = self.r_samples.mean(axis=0)
+        # Performance optimization: Use incremental mean calculation instead of recomputing
+        old_count = self.r_count
+        new_count = new_samples.shape[0]
+        total_count = old_count + new_count
+
+        # Only update mean if new_count > 0
+        if new_count > 0:
+            new_mean = new_samples.mean(axis=0)
+            self.r_mean = (old_count * self.r_mean + new_count * new_mean) / total_count
+
+            # Use np.concatenate for better performance if both arrays are contiguous
+            self.r_samples = np.concatenate([self.r_samples, new_samples], axis=0)
+            self.r_count = total_count
 
     def get_mean(self) -> np.ndarray:
         """Return the mean of the regime."""
@@ -116,7 +137,7 @@ def euclidean(u: np.ndarray, v: np.ndarray) -> float:
     Returns:
         float: Euclidean distance.
     """
-    return np.linalg.norm(u - v)
+    return float(np.linalg.norm(u - v))
 
 
 def calculate_iqr_threshold(history_of_distances, k=1.5, min_samples=2):
@@ -238,7 +259,6 @@ class CandiStrategy(
         warm_up_period: int = 2,
         threshold_cal_index: int = 0,
         resize_new_regime: bool = False,
-        boundary_aware: bool = False,
     ):
         """
         Initialize the WATCH strategy.
@@ -259,15 +279,6 @@ class CandiStrategy(
             warm_up_period  # number of regimes to consider before thresholding
         )
 
-        self.past_distances = []
-        # best matching distances of all past regimes,
-        # used to calculate the current threshold,
-        # so 98 percentile of the past distances are greater than the current threshold
-
-        self.mean = None  # mean of all past regimes
-        self.sum = None  # sum of all past regimes
-        self.count = 0  # count of all past regimes
-
         self.threshold_cal_funcs = [
             calculate_iqr_threshold,
             calculate_percentile_threshold,
@@ -275,7 +286,6 @@ class CandiStrategy(
         ]
         self.threshold_cal_fun = self.threshold_cal_funcs[threshold_cal_index]
         self.resize_new_regime = resize_new_regime
-        self.boundary_aware = boundary_aware
 
     def _calculate_distance(self, regime1: Regime, regime2: Regime) -> float:
         """
@@ -308,17 +318,18 @@ class CandiStrategy(
         """
         if not self._replay:
             return float("inf"), -1
-
-        best_distance = float("inf")
-        best_index = -1
-
-        for i, regime in enumerate(self._replay):
-            distance = self._calculate_distance(new_regime, regime)
-            if distance < best_distance:
-                best_distance = distance
-                best_index = i
-
-        return best_distance, best_index
+        new_mean = new_regime.get_mean()
+        # Use generator to avoid unnecessary array creation if only one regime
+        if len(self._replay) == 1:
+            dist = chebyshev_min(self._replay[0].get_mean(), new_mean)
+            return dist, 0
+        means = np.stack([regime.get_mean() for regime in self._replay])
+        # Vectorized chebyshev_min: min(abs(mean - new_mean)) for each regime
+        abs_diff = np.abs(means - new_mean)
+        distances = np.min(abs_diff, axis=1)
+        best_index = np.argmin(distances)
+        best_distance = float(distances[best_index])
+        return best_distance, int(best_index)
 
     def _should_create_new_regime(self, distance: float) -> bool:
         """
@@ -338,23 +349,29 @@ class CandiStrategy(
             return False
 
     def _update_regime_size_limits(self) -> None:
+        print("Updating regime size limits.")
         """Update regime sizes to fit within the buffer limit."""
+        # recalculate current size
+        self.current_size = sum(regime.r_count for regime in self._replay)
         if self.current_size <= self.max_buffer_size:
+            print("Current size is within the buffer limit.")
             return
 
         # Equal proportions for all regimes
-        buffer_limit = math.ceil(self.max_buffer_size / len(self._replay))
+        buffer_limit = max(1, math.ceil(self.max_buffer_size / len(self._replay)))
+        print(f"Buffer limit for each regime: {buffer_limit}")
 
         for regime in self._replay:
             if len(regime) > buffer_limit:
                 # Sample from the regime to reduce its size
                 regime.r_samples = self._select_samples(regime.r_samples, buffer_limit)
                 regime.r_count = buffer_limit
+                regime.recalculate_mean()  # Recalculate mean after resampling
 
         # Update current size after sampling
         self.current_size = sum(regime.r_count for regime in self._replay)
 
-        # Remove empty regimes
+        # Remove empty regimes efficiently
         self._replay = [regime for regime in self._replay if regime.r_count > 0]
 
     def _select_samples(self, buffer: np.ndarray, n_samples: int) -> np.ndarray:
@@ -370,8 +387,9 @@ class CandiStrategy(
         """
         if n_samples >= buffer.shape[0]:
             return buffer
-
-        indices = np.random.choice(buffer.shape[0], n_samples, replace=False)
+        # Use np.random.Generator for better performance and reproducibility if needed
+        rng = np.random.default_rng()
+        indices = rng.choice(buffer.shape[0], n_samples, replace=False)
         return buffer[indices]
 
     def update(self, data: np.ndarray) -> None:
@@ -382,6 +400,7 @@ class CandiStrategy(
             data (np.ndarray): New data batch to process.
         """
         new_regime = Regime(data)
+        past_distances = []
 
         if not self._replay:
             # If there are no regimes, add the new regime
@@ -392,11 +411,11 @@ class CandiStrategy(
 
         # Find the best matching regime
         best_distance, best_index = self._find_best_matching_regime(new_regime)
-        self.past_distances.append(best_distance)
+        past_distances.append(best_distance)
 
         # Calculate the current threshold based on past distances
-        if len(self.past_distances) > self.warm_up_period:
-            self.cur_threshold = self.threshold_cal_fun(np.array(self.past_distances))
+        if len(self._replay) > self.warm_up_period:
+            self.cur_threshold = self.threshold_cal_fun(np.array(past_distances))
 
         # should create a new regime
         # if the distance is above the threshold or regimes is less then warm up period
@@ -421,11 +440,15 @@ class CandiStrategy(
             *_args: Additional positional arguments (unused but required for interface compatibility).
             **_kwargs: Additional keyword arguments (unused but required for interface compatibility).
         """
-        # Collect all regime samples
-        replay_samples = [regime.r_samples for regime in self._replay]
+        # Collect all regime samples efficiently
+        if self._replay:
+            replay_samples = [
+                regime.r_samples for regime in self._replay if regime.r_count > 0
+            ]
+        else:
+            replay_samples = []
 
         # sub sample data to fit buffer size, the upper limit is self.max_buffer_size
-        # randomly choose from data
         if self.resize_new_regime:
             sub_samples = self._select_samples(data, self.max_buffer_size)
         else:
@@ -433,11 +456,12 @@ class CandiStrategy(
 
         if replay_samples:
             replay_samples.append(sub_samples)
-            combined_data = np.concatenate(replay_samples)
+            combined_data = np.concatenate(replay_samples, axis=0)
         else:
             combined_data = sub_samples
 
         # Fit the model on the combined data
+        print(f"Fitting model on combined data of shape: {combined_data.shape}")
         self._model.fit(combined_data)
 
         # Update the replay buffer
