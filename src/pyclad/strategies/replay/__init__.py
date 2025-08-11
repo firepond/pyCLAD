@@ -5,8 +5,8 @@ from .reservoir import (
     ReservoirSamplingStrategy,
     calculate_lof_entropy,
 )
-from .candi import (
-    CandiStrategy,
+from .watch import (
+    WatchStrategy,
     Regime,
     chebyshev_min,
 )
@@ -14,7 +14,7 @@ from .candi import (
 __all__ = [
     "ReservoirSamplingStrategy",
     "BalancedReservoirSamplingStrategy",
-    "CandiStrategy",
+    "WatchStrategy",
     "Regime",
     "calculate_lof_entropy",
     "chebyshev_min",

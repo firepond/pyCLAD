@@ -33,25 +33,16 @@ class ConceptMetricCallback(Callback, InfoProvider):
         **kwargs,
     ):
         assert (
-            evaluated_concept.name
-            not in self._metric_matrix[self._learned_concepts[-1]]
+            evaluated_concept.name not in self._metric_matrix[self._learned_concepts[-1]]
         ), "The same concept should not be evaluated twice after the same learned concept"
 
-        metric_value = self._base_metric.compute(
-            anomaly_scores=anomaly_scores, y_true=y_true, y_pred=y_pred
-        )
-        self._metric_matrix[self._learned_concepts[-1]][
-            evaluated_concept.name
-        ] = metric_value
+        metric_value = self._base_metric.compute(anomaly_scores=anomaly_scores, y_true=y_true, y_pred=y_pred)
+        self._metric_matrix[self._learned_concepts[-1]][evaluated_concept.name] = metric_value
 
     def info(self) -> Dict[str, Any]:
 
-        concept_level_matrix = self._transform_to_ordered_matrix(
-            self._metric_matrix, self._learned_concepts
-        )
-        lifelong_learning_metrics = {
-            m.name(): m.compute(concept_level_matrix) for m in self._metrics
-        }
+        concept_level_matrix = self._transform_to_ordered_matrix(self._metric_matrix, self._learned_concepts)
+        lifelong_learning_metrics = {m.name(): m.compute(concept_level_matrix) for m in self._metrics}
 
         return {
             f"concept_metric_callback_{self._base_metric.name()}": {
@@ -76,26 +67,3 @@ class ConceptMetricCallback(Callback, InfoProvider):
                 values[-1].append(metric_matrix[learned_concept][evaluated_concept])
 
         return values
-
-    def print_lifelong_learning_metrics(self):
-        info = self.info()
-        key = list(info.keys())[0]
-        info = info[key]
-        metrics = info["metrics"]
-        for metric_name, value in metrics.items():
-            print(f"{metric_name}: {value}")
-
-    def print_continual_average(self):
-        info = self.info()
-        key = list(info.keys())[0]
-        info = info[key]
-        metrics = info["metrics"]
-        continual_average = metrics["ContinualAverage"]
-        print(f"Continual Average: {continual_average}")
-
-    def get_continual_average(self):
-        info = self.info()
-        key = list(info.keys())[0]
-        info = info[key]
-        metrics = info["metrics"]
-        return metrics["ContinualAverage"]
