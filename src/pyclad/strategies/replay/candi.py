@@ -119,7 +119,106 @@ def euclidean(u: np.ndarray, v: np.ndarray) -> float:
     return np.linalg.norm(u - v)
 
 
-class WatchStrategy(
+def calculate_iqr_threshold(history_of_distances, k=1.5, min_samples=2):
+    """
+    Calculates an adaptive threshold for outlier detection using the
+    Interquartile Range (IQR) method (Tukey's Fences).
+
+    This method is robust and well-suited for skewed distributions, which is
+    common for distance metrics.
+
+    Args:
+        history_of_distances (np.ndarray): A 1D NumPy array containing the history
+                                           of "best distances" from past normal
+                                           observations.
+        k (float, optional): The multiplier for the IQR. The standard value is 1.5
+                             for detecting "mild outliers". Defaults to 1.5.
+        min_samples (int, optional): The minimum number of historical distances
+                                     required to calculate a stable threshold.
+                                     Defaults to 2.
+
+    Returns:
+        float: The calculated adaptive threshold. Returns np.inf if there are
+               not enough samples in the history, effectively disabling detection
+               until enough data is gathered.
+    """
+    # --- Edge Case Handling ---
+    # If the history is too small, we can't get a reliable statistical measure.
+    # Return infinity to prevent any new mode creation during this "warm-up" period.
+    if len(history_of_distances) < min_samples:
+        return np.inf
+
+    # --- Core Calculation ---
+    # 1. Calculate the First Quartile (Q1 - the 25th percentile)
+    q1 = np.percentile(history_of_distances, 25)
+
+    # 2. Calculate the Third Quartile (Q3 - the 75th percentile)
+    q3 = np.percentile(history_of_distances, 75)
+
+    # 3. Calculate the Interquartile Range (IQR)
+    iqr = q3 - q1
+
+    # If IQR is zero (all historical distances are the same), the threshold is simply Q3
+    if iqr == 0:
+        # We add a tiny epsilon to ensure the threshold is slightly above the constant value
+        return q3 + 1e-9
+
+    # 4. Calculate the adaptive threshold (the "upper fence")
+    threshold = q3 + k * iqr
+
+    return threshold
+
+
+def calculate_percentile_threshold(history_of_distances, percentile=95):
+    """
+    Calculate a percentile-based threshold for outlier detection.
+
+    Args:
+        history_of_distances (np.ndarray): A 1D NumPy array containing the history
+                                           of "best distances" from past normal
+                                           observations.
+        percentile (float, optional): The percentile to use for the threshold.
+                                       Defaults to 90.
+
+    Returns:
+        float: The calculated percentile threshold. Returns np.inf if there are
+               not enough samples in the history, effectively disabling detection
+               until enough data is gathered.
+    """
+    if len(history_of_distances) <= 2:
+        return np.inf
+
+    result = np.percentile(history_of_distances, percentile) * 0.2
+    return result
+
+
+def calculate_combined_threshold(history_of_distances, iqr_k=1.5, percentile=95):
+    """
+    Calculate a combined threshold for outlier detection using both IQR and percentile methods.
+
+    Args:
+        history_of_distances (np.ndarray): A 1D NumPy array containing the history
+                                           of "best distances" from past normal
+                                           observations.
+        iqr_k (float, optional): The multiplier for the IQR. Defaults to 1.5.
+        percentile (float, optional): The percentile to use for the threshold.
+                                       Defaults to 95.
+
+    Returns:
+        float: The calculated combined threshold.
+    """
+    iqr_threshold = calculate_iqr_threshold(history_of_distances, k=iqr_k)
+    percentile_threshold = calculate_percentile_threshold(
+        history_of_distances, percentile=percentile
+    )
+
+    # Combine the thresholds using a simple average
+    combined_threshold = min(iqr_threshold, percentile_threshold)
+
+    return combined_threshold
+
+
+class CandiStrategy(
     ConceptAwareStrategy, ConceptIncrementalStrategy, ConceptAgnosticStrategy
 ):
     """
@@ -132,7 +231,14 @@ class WatchStrategy(
     """
 
     def __init__(
-        self, model: Model, max_buffer_size: int = 1000, threshold_ratio: float = 0.1
+        self,
+        model: Model,
+        max_buffer_size: int = 1000,
+        threshold_ratio: float = 0.5,
+        warm_up_period: int = 2,
+        threshold_cal_index: int = 0,
+        resize_new_regime: bool = False,
+        boundary_aware: bool = False,
     ):
         """
         Initialize the WATCH strategy.
@@ -149,15 +255,27 @@ class WatchStrategy(
         self.threshold_ratio = threshold_ratio  # multiplier for the threshold ratio
 
         self.cur_threshold = threshold_ratio
+        self.warm_up_period = (
+            warm_up_period  # number of regimes to consider before thresholding
+        )
 
         self.past_distances = []
         # best matching distances of all past regimes,
         # used to calculate the current threshold,
-        # so 90 percentile of the past distances are greater than the current threshold
+        # so 98 percentile of the past distances are greater than the current threshold
 
         self.mean = None  # mean of all past regimes
         self.sum = None  # sum of all past regimes
         self.count = 0  # count of all past regimes
+
+        self.threshold_cal_funcs = [
+            calculate_iqr_threshold,
+            calculate_percentile_threshold,
+            calculate_combined_threshold,
+        ]
+        self.threshold_cal_fun = self.threshold_cal_funcs[threshold_cal_index]
+        self.resize_new_regime = resize_new_regime
+        self.boundary_aware = boundary_aware
 
     def _calculate_distance(self, regime1: Regime, regime2: Regime) -> float:
         """
@@ -170,10 +288,10 @@ class WatchStrategy(
         Returns:
             float: Distance between the regimes.
         """
-        # distance = chebyshev_min(regime1.get_samples(), regime2.get_mean())
+        distance = chebyshev_min(regime1.get_mean(), regime2.get_mean())
         # distance = acc(regime1.get_samples(), regime2.get_mean())
         # Use Euclidean distance for regime comparison
-        distance = euclidean(regime1.get_mean(), regime2.get_mean())
+        # distance = euclidean(regime1.get_mean(), regime2.get_mean())
         # Alternative: Mahalanobis distance
         # distance = mahalanobis_batch_to_dist(regime1.get_samples(), regime2.get_samples())
         return distance
@@ -212,7 +330,12 @@ class WatchStrategy(
         Returns:
             bool: True if a new regime should be created.
         """
-        return distance > self.cur_threshold
+        if distance > self.cur_threshold:
+            # If the distance is greater than the threshold, create a new regime
+            return True
+        else:
+            # If the distance is less than or equal to the threshold, do not create a new regime
+            return False
 
     def _update_regime_size_limits(self) -> None:
         """Update regime sizes to fit within the buffer limit."""
@@ -272,57 +395,22 @@ class WatchStrategy(
         self.past_distances.append(best_distance)
 
         # Calculate the current threshold based on past distances
-        if len(self.past_distances) > 3:
-            # Use the 90th percentile of past distances to set the threshold
-            percent = np.percentile(self.past_distances, 90)
-            # if percent is not a scalar, take the first element
-            if isinstance(percent, np.ndarray):
-                print(
-                    "Percentile is not a scalar, taking the first element. Percentile shape:",
-                    percent.shape,
-                )
-                percent = percent[0]
-            if percent == 0:
-                # self.cur_threshold = 0%.6f", self.cur_threshold)
-                pass
-            else:
-                self.cur_threshold = percent * self.threshold_ratio
+        if len(self.past_distances) > self.warm_up_period:
+            self.cur_threshold = self.threshold_cal_fun(np.array(self.past_distances))
 
-        # print cur threshold
-        # print(f"Current threshold: {self.cur_threshold:.6f}")
-        # should create a new regime if the distance is above the threshold or only 2 regimes exist
-        if self._should_create_new_regime(best_distance) or len(self._replay) < 2:
+        # should create a new regime
+        # if the distance is above the threshold or regimes is less then warm up period
+        if (
+            self._should_create_new_regime(best_distance)
+            or len(self._replay) < self.warm_up_period
+        ):
             # Create a new regime if the distance is above the threshold
             self._replay.append(new_regime)
-            # print("New regime added")
         else:
             # Update the existing regime with the new data
             self._replay[best_index].add_samples(new_regime.get_samples())
-            # print("Regime updated")
 
-        # Update current size
-        # self.current_size = sum(regime.r_count for regime in self._replay)
-
-        # Manage buffer size limits
         self._update_regime_size_limits()
-        # update the mean, sum and count for the threshold calculation
-        # self.sum = (
-        #     np.sum(data, axis=0)
-        #     if self.sum is None
-        #     else self.sum + np.sum(data, axis=0)
-        # )
-        # self.count += data.shape[0]
-        # self.mean = self.sum / self.count if self.count > 0 else 0
-        # # assert  self.mean is ndarray
-        # if type(self.mean) is not np.ndarray:
-        #     self.mean = np.array(self.mean)
-        # dist = chebyshev_min(self.mean, new_regime.get_mean())
-        # if dist > self.max_distance:
-        #     self.max_distance = dist
-        #     print("New maximum distance found: %.2f", self.max_distance)
-        # # Update the current threshold based on the maximum distance
-        # if self.max_distance > 0:
-        #     self.cur_threshold = self.threshold_ratio * self.max_distance
 
     def learn(self, data: np.ndarray, *_args, **_kwargs) -> None:
         """
@@ -336,17 +424,24 @@ class WatchStrategy(
         # Collect all regime samples
         replay_samples = [regime.r_samples for regime in self._replay]
 
+        # sub sample data to fit buffer size, the upper limit is self.max_buffer_size
+        # randomly choose from data
+        if self.resize_new_regime:
+            sub_samples = self._select_samples(data, self.max_buffer_size)
+        else:
+            sub_samples = data
+
         if replay_samples:
-            replay_samples.append(data)
+            replay_samples.append(sub_samples)
             combined_data = np.concatenate(replay_samples)
         else:
-            combined_data = data
+            combined_data = sub_samples
 
         # Fit the model on the combined data
         self._model.fit(combined_data)
 
         # Update the replay buffer
-        self.update(data)
+        self.update(sub_samples)
 
     def predict(
         self, data: np.ndarray, *_args, **_kwargs
