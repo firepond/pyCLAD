@@ -16,7 +16,9 @@ class EnergyPlantsDataset(ConceptsDataset):
     def __init__(
         self,
         dataset_type: Literal[
-            "random_anomalies", "clustered_with_closest_assignment", "clustered_with_random_assignment"
+            "random_anomalies",
+            "clustered_with_closest_assignment",
+            "clustered_with_random_assignment",
         ],
         cache_dir: str = None,
     ):
@@ -32,5 +34,7 @@ class EnergyPlantsDataset(ConceptsDataset):
         train_concepts = read_concepts_from_df(data["train"].to_pandas())
         test_concepts = read_concepts_from_df(data["test"].to_pandas())
         super().__init__(
-            name=f"Energy-Plants-{dataset_type}", train_concepts=train_concepts, test_concepts=test_concepts
+            name=f"Energy-Plants-{dataset_type}",
+            train_concepts=train_concepts,
+            test_concepts=test_concepts,
         )

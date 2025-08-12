@@ -1,11 +1,14 @@
 from typing import List
 
+from pyclad.data import concept
 from pyclad.data.concept import Concept
 from pyclad.data.dataset import Dataset
 
 
 class ConceptsDataset(Dataset):
-    def __init__(self, name: str, train_concepts: List[Concept], test_concepts: List[Concept]):
+    def __init__(
+        self, name: str, train_concepts: List[Concept], test_concepts: List[Concept]
+    ):
         self._train_concepts = train_concepts
         self._test_concepts = test_concepts
         self._name = name
@@ -20,4 +23,12 @@ class ConceptsDataset(Dataset):
         return self._name
 
     def additional_info(self):
-        return {"tran_concepts_no": len(self._train_concepts), "test_concepts_no": len(self._test_concepts)}
+        return {
+            "tran_concepts_no": len(self._train_concepts),
+            "test_concepts_no": len(self._test_concepts),
+        }
+
+    def get_max_count(self):
+        # get the max count of samples in all train concepts
+        max_count = max([concept.data.shape[0] for concept in self._train_concepts])
+        return max_count

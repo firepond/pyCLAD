@@ -252,10 +252,15 @@ class CandiStrategy(
     """
 
     def __init__(
-        self, model: Model, max_buffer_size: int = 1000, threshold_ratio: float = 0.1
+        self,
+        model: Model,
+        max_buffer_size: int = 1000,
+        threshold_ratio: float = 0.1,
+        warmup_period: int = 5,
+        resize_new_regime: bool = True,
     ):
         """
-        Initialize the WATCH strategy.
+        Initialize the CANDI strategy.
 
         Args:
             model (Model): The anomaly detection model to use.
@@ -271,15 +276,10 @@ class CandiStrategy(
         self.cur_threshold = threshold_ratio
 
         self.past_distances = []
-        # best matching distances of all past regimes,
-        # used to calculate the current threshold,
-        # so 90 percentile of the past distances are greater than the current threshold
+        self.warmup_period = warmup_period
+        self.resize_new_regime = resize_new_regime
 
-        self.mean = None  # mean of all past regimes
-        self.sum = None  # sum of all past regimes
-        self.count = 0  # count of all past regimes
-
-    def _calculate_distance(self, regime1: Regime, regime2: Regime) -> float:
+    def _calculate_distance(self, regime1_mean, regime2_mean) -> float:
         """
         Calculate distance between two regimes.
 
@@ -290,13 +290,7 @@ class CandiStrategy(
         Returns:
             float: Distance between the regimes.
         """
-        # distance = chebyshev_min(regime1.get_mean(), regime2.get_mean())
-        # distance = acc(regime1.get_samples(), regime2.get_mean())
-        # Use Euclidean distance for regime comparison
-        distance = euclidean(regime1.get_mean(), regime2.get_mean())
-        distance = euclidean(regime1.get_mean(), regime2.get_mean())
-        # Alternative: Mahalanobis distance
-        # distance = mahalanobis_batch_to_dist(regime1.get_samples(), regime2.get_samples())
+        distance = euclidean(regime1_mean, regime2_mean)
         return distance
 
     def _find_best_matching_regime(self, new_regime: Regime) -> Tuple[float, int]:
@@ -314,14 +308,11 @@ class CandiStrategy(
         new_mean = new_regime.get_mean()
         # Use generator to avoid unnecessary array creation if only one regime
         if len(self._replay) == 1:
-            dist = chebyshev_min(self._replay[0].get_mean(), new_mean)
+            dist = self._calculate_distance(self._replay[0].get_mean(), new_mean)
             return dist, 0
         means = np.stack([regime.get_mean() for regime in self._replay])
-        # Vectorized chebyshev_min: min(abs(mean - new_mean)) for each regime
-        abs_diff = np.abs(means - new_mean)
-        distances = np.min(abs_diff, axis=1)
-        best_index = np.argmin(distances)
-        best_distance = float(distances[best_index])
+        best_distance = self._calculate_distance(means, new_mean)
+        best_index = np.argmin(best_distance)
         return best_distance, int(best_index)
 
     def _should_create_new_regime(self, distance: float) -> bool:
@@ -337,12 +328,9 @@ class CandiStrategy(
         return distance > self.cur_threshold
 
     def _update_regime_size_limits(self) -> None:
-        print("Updating regime size limits.")
-        """Update regime sizes to fit within the buffer limit."""
 
         # Equal proportions for all regimes
         buffer_limit = max(1, math.ceil(self.max_buffer_size / len(self._replay)))
-        print(f"Buffer limit for each regime: {buffer_limit}")
 
         for regime in self._replay:
             if len(regime) > buffer_limit:
@@ -389,36 +377,27 @@ class CandiStrategy(
             # If there are no regimes, add the new regime
             self._replay.append(new_regime)
             self.current_size += data.shape[0]
-            # print("Initial regime added")
 
         # Find the best matching regime
         best_distance, best_index = self._find_best_matching_regime(new_regime)
         past_distances.append(best_distance)
 
         # Calculate the current threshold based on past distances
-        if len(self.past_distances) > 3:
+        if len(self.past_distances) > self.warmup_period:
             # Use the 90th percentile of past distances to set the threshold
-            percent = np.percentile(self.past_distances, 90)
-            # if percent is not a scalar, take the first element
-            if isinstance(percent, np.ndarray):
-                print(
-                    "Percentile is not a scalar, taking the first element. Percentile shape:",
-                    percent.shape,
-                )
-                percent = percent[0]
+            percent = calculate_percentile_threshold(self.past_distances, 90)
             if percent == 0:
-                # self.cur_threshold = 0%.6f", self.cur_threshold)
                 pass
             else:
-                self.cur_threshold = percent * self.threshold_ratio
+                self.cur_threshold = percent
 
-        # print cur threshold
-        # print(f"Current threshold: {self.cur_threshold:.6f}")
         # should create a new regime if the distance is above the threshold or only 2 regimes exist
-        if self._should_create_new_regime(best_distance) or len(self._replay) < 2:
+        if (
+            self._should_create_new_regime(best_distance)
+            or len(self._replay) < self.warmup_period
+        ):
             # Create a new regime if the distance is above the threshold
             self._replay.append(new_regime)
-            # print("New regime added")
         else:
             # Update the existing regime with the new data
             print(f"Updating regime {best_index} with new samples")
@@ -428,24 +407,6 @@ class CandiStrategy(
 
         # Manage buffer size limits
         self._update_regime_size_limits()
-        # update the mean, sum and count for the threshold calculation
-        # self.sum = (
-        #     np.sum(data, axis=0)
-        #     if self.sum is None
-        #     else self.sum + np.sum(data, axis=0)
-        # )
-        # self.count += data.shape[0]
-        # self.mean = self.sum / self.count if self.count > 0 else 0
-        # # assert  self.mean is ndarray
-        # if type(self.mean) is not np.ndarray:
-        #     self.mean = np.array(self.mean)
-        # dist = chebyshev_min(self.mean, new_regime.get_mean())
-        # if dist > self.max_distance:
-        #     self.max_distance = dist
-        #     print("New maximum distance found: %.2f", self.max_distance)
-        # # Update the current threshold based on the maximum distance
-        # if self.max_distance > 0:
-        #     self.cur_threshold = self.threshold_ratio * self.max_distance
 
     def learn(self, data: np.ndarray, *_args, **_kwargs) -> None:
         """
@@ -467,13 +428,13 @@ class CandiStrategy(
             else:
                 sub_samples = data
         else:
-            replay_samples = []
+            sub_samples = data
 
         if replay_samples:
-            replay_samples.append(data)
+            replay_samples.append(sub_samples)
             combined_data = np.concatenate(replay_samples)
         else:
-            combined_data = data
+            combined_data = sub_samples
 
         # Fit the model on the combined data
         print(f"Fitting model with {combined_data.shape[0]} samples")
@@ -500,7 +461,7 @@ class CandiStrategy(
 
     def name(self) -> str:
         """Return the name of the strategy."""
-        return "BalancedWATCHReservoirSampling"
+        return "CANDIReservoirSampling"
 
     def additional_info(self) -> Dict:
         """
@@ -511,7 +472,7 @@ class CandiStrategy(
         """
         return {
             "model": self._model.name(),
-            "strategy": "WATCH",
+            "strategy": "CANDI",
             "buffer_size": self.max_buffer_size,
             "current_size": self.current_size,
             "num_regimes": len(self._replay),
