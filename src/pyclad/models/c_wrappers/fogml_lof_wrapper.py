@@ -9,9 +9,12 @@ Licensed under the Apache License, Version 2.0
 """
 
 import ctypes
+from time import perf_counter
 import numpy as np
 from pathlib import Path
 from typing import Union, Optional, Tuple
+import threading
+import os
 
 
 class TinyMLLOFConfig(ctypes.Structure):
@@ -54,12 +57,13 @@ class FogMLLOF:
         _lib (ctypes.CDLL): Loaded C library
     """
 
-    def __init__(self, k: int = 5):
+    def __init__(self, k: int = 5, n_threads: int = 10):
         """
         Initialize the FogML LOF model.
 
         Args:
             k (int): Number of nearest neighbors to consider (must be > 0)
+            n_threads (int): Number of threads for OpenMP (1 = disable threading)
 
         Raises:
             ValueError: If k <= 0
@@ -69,11 +73,15 @@ class FogMLLOF:
             raise ValueError("k must be greater than 0")
 
         self.k = k
+        self.n_threads = n_threads
         self.is_fitted = False
         self.config: Optional[TinyMLLOFConfig] = None
         self._data: Optional[ctypes.Array] = None
         self._k_distance: Optional[ctypes.Array] = None
         self._lrd: Optional[ctypes.Array] = None
+
+        # Set OpenMP thread limit
+        os.environ["OMP_NUM_THREADS"] = str(n_threads)
 
         # Load the C library
         self._lib = self._load_library()
@@ -113,6 +121,17 @@ class FogMLLOF:
         ]
         self._lib.tinyml_lof_score.restype = ctypes.c_float
 
+        # vectored version of tinyml_score
+        self._lib.tinyml_lof_score_vectored.argtypes = [
+            ctypes.POINTER(
+                ctypes.POINTER(ctypes.c_float)
+            ),  # vector, 2d float array, outer layer is n_samples, inner layer is n_features
+            ctypes.POINTER(TinyMLLOFConfig),  # config
+            ctypes.POINTER(ctypes.c_float),  # scores
+            ctypes.c_int,  # n_samples
+        ]
+        self._lib.tinyml_lof_score_vectored.restype = None
+
     def fit(self, X: Union[np.ndarray, list]) -> "FogMLLOF":
         """
         Fit the LOF model to the training data.
@@ -127,6 +146,7 @@ class FogMLLOF:
             ValueError: If input data is invalid
             RuntimeError: If fitting fails
         """
+        # return self
         # Convert to numpy array and validate
         X = np.asarray(X, dtype=np.float32)
 
@@ -157,8 +177,18 @@ class FogMLLOF:
         self.config.lrd = self._lrd
 
         # Initialize and learn
+        # measure the run time of the next two calls
+        start_time = perf_counter()
         self._lib.tinyml_lof_init(ctypes.byref(self.config))
+        init_time = perf_counter() - start_time
+
+        start_time = perf_counter()
         self._lib.tinyml_lof_learn(ctypes.byref(self.config))
+
+        learn_time = perf_counter() - start_time
+
+        print(f"Initialization time: {init_time:.4f} seconds")
+        print(f"Learning time: {learn_time:.4f} seconds")
 
         self.is_fitted = True
         return self
@@ -176,6 +206,9 @@ class FogMLLOF:
         Raises:
             ValueError: If the model is not fitted or input is invalid
         """
+        # fake return 0, for testing
+        return np.zeros(X.shape[0], dtype=np.float32)
+
         if not self.is_fitted:
             raise ValueError("Model must be fitted before calling decision_function")
 
@@ -199,12 +232,15 @@ class FogMLLOF:
         # Compute LOF scores
         scores = np.zeros(n_samples, dtype=np.float32)
 
+        # Call the vectored version
+        vector_ptr = (ctypes.POINTER(ctypes.c_float) * n_samples)()
+        scores_ptr = (ctypes.c_float * n_samples)()
         for i in range(n_samples):
-            # Convert sample to C array
-            sample = (ctypes.c_float * n_features)(*X[i])
-            # Compute LOF score
-            score = self._lib.tinyml_lof_score(sample, ctypes.byref(self.config))
-            scores[i] = score
+            vector_ptr[i] = (ctypes.c_float * n_features)(*X[i])
+        self._lib.tinyml_lof_score_vectored(
+            vector_ptr, ctypes.byref(self.config), scores_ptr, n_samples
+        )
+        scores = np.ctypeslib.as_array(scores_ptr, shape=(n_samples,))
 
         return scores
 

@@ -14,6 +14,7 @@
 #include "fogml_lof.h"
 
 #include <math.h>
+#include <omp.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <time.h>
@@ -145,6 +146,13 @@ float tinyml_lof_score(float *vector, tinyml_lof_config_t *config) {
     return score;
 }
 
+void tinyml_lof_score_vectored(float **vector, tinyml_lof_config_t *config, float *scores, int size) {
+#pragma omp parallel for
+    for (int i = 0; i < size; i++) {
+        scores[i] = tinyml_lof_score(vector[i], config);
+    }
+}
+
 void tinyml_lof_learn(tinyml_lof_config_t *config) {
     int neighbours[10];
 
@@ -154,28 +162,9 @@ void tinyml_lof_learn(tinyml_lof_config_t *config) {
     for (int i = 0; i < config->n; i++) {
         tinyml_lof_k_neighbours(i, neighbours, config);
 
-        // Serial.print("Neighbours ");
-        // Serial.print(i);
-        // Serial.print(":");
-        // for(int x=0; x<config->parameter_k; x++) {
-        //   Serial.print(neighbours[x]);
-        //   Serial.print(" ");
-        // }
-        // Serial.println();
-
         // k-distance calculation
         config->k_distance[i] = tinyml_lof_normal_distance_vec(LOF_VECTOR(i, config), LOF_VECTOR(neighbours[config->parameter_k - 1], config), config->vector_size);
         // lrd distance calculation
         config->lrd[i] = tinyml_lof_reachability_density(LOF_VECTOR(i, config), neighbours, config);
-
-        // Serial.print("K-distance/LRD ");
-        // Serial.print(i);
-        // Serial.print(":");
-        // Serial.print(config->k_distance[i]);
-        // Serial.print(" / ");
-        // Serial.print(config->lrd[i]);
-        // Serial.println();
-
-        // Serial.println(i);
     }
 }

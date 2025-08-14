@@ -1,5 +1,9 @@
-## compiler
-CC=gcc
+## compiler - Use clang from Homebrew's llvm installation
+CC=/opt/homebrew/opt/llvm/bin/clang
+
+## Linker flags to find the OpenMP library
+LDFLAGS = -L/opt/homebrew/opt/llvm/lib
+
 # directories
 ODIR=lib
 #files
@@ -10,7 +14,7 @@ all: $(LOF_OBJ)
 # rule to build shared objects
 $(ODIR)/%.so: %.c
 		mkdir -p $(@D)
-		$(CC) -fPIC -shared -o $@ $<
+		$(CC)  -fPIC -fopenmp -shared -o $@ $< $(LDFLAGS)
 
 .PHONY: clean
 clean:
