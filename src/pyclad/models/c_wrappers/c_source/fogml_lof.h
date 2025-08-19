@@ -26,7 +26,7 @@ typedef struct tinyml_lof_config {
     float *lrd;         // Local Reachability Density for each of n points
     int n;              // number of points in data
     int vector_size;    // dimension of each points
-    float *data;        // set of points
+    float *data;        // set of points, ignore it
 } tinyml_lof_config_t;
 
 void tinyml_lof_init(tinyml_lof_config_t *config);

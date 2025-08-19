@@ -53,23 +53,47 @@ int compare_distances(const void *a, const void *b) {
     return 0;
 }
 
+// void tinyml_lof_k_neighbours_vec(float *vector, int *neighbours, tinyml_lof_config_t *config) {
+//     // This assumes config->n is not excessively large to cause stack overflow.
+//     // For very large n, allocate `all_distances` on the heap instead.
+//     distance_t all_distances[config->n];
+
+//     // 1. Calculate distance to all points
+//     for (int i = 0; i < config->n; i++) {
+//         all_distances[i].dist = tinyml_lof_normal_distance_vec(vector, LOF_VECTOR(i, config), config->vector_size);
+//         all_distances[i].index = i;
+//     }
+
+//     // 2. Sort distances in ascending order
+//     qsort(all_distances, config->n, sizeof(distance_t), compare_distances);
+
+//     // 3. Get the first k neighbours
+//     for (int k = 0; k < config->parameter_k; k++) {
+//         neighbours[k] = all_distances[k].index;
+//     }
+// }
+
 void tinyml_lof_k_neighbours_vec(float *vector, int *neighbours, tinyml_lof_config_t *config) {
-    // This assumes config->n is not excessively large to cause stack overflow.
-    // For very large n, allocate `all_distances` on the heap instead.
-    distance_t all_distances[config->n];
-
-    // 1. Calculate distance to all points
-    for (int i = 0; i < config->n; i++) {
-        all_distances[i].dist = tinyml_lof_normal_distance_vec(vector, LOF_VECTOR(i, config), config->vector_size);
-        all_distances[i].index = i;
-    }
-
-    // 2. Sort distances in ascending order
-    qsort(all_distances, config->n, sizeof(distance_t), compare_distances);
-
-    // 3. Get the first k neighbours
     for (int k = 0; k < config->parameter_k; k++) {
-        neighbours[k] = all_distances[k].index;
+        float max = TINYML_MAX_DISTANCE;
+
+        for (int i = 0; i < config->n; i++) {
+            bool used = false;
+            for (int j = 0; j < k; j++) {
+                if (neighbours[j] == i) {
+                    used = true;
+                    break;
+                }  // was used before
+            }
+            if (used)
+                continue;
+
+            float dist = tinyml_lof_normal_distance_vec(vector, LOF_VECTOR(i, config), config->vector_size);
+            if (dist < max) {
+                max = dist;
+                neighbours[k] = i;
+            };
+        }
     }
 }
 
