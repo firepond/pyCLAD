@@ -13,6 +13,7 @@
 
 #include "fogml_lof.h"
 
+#include <float.h>
 #include <math.h>
 #include <omp.h>
 #include <stdbool.h>
@@ -20,58 +21,65 @@
 #include <time.h>
 
 #define LOF_VECTOR(i, config) &(config->data[i * config->vector_size])
-#define TINYML_MAX_DISTANCE 99999.0
+#define TINYML_MAX_DISTANCE FLT_MAX
 
 void tinyml_lof_init(tinyml_lof_config_t *config) {
 }
 
-float tinyml_lof_normal_distance_vec(float *vec_a, float *vec_b, int len) {
-    float dist = 0;
-
+// Fast squared Euclidean distance (no pow, no sqrt). Vectorized.
+static inline float tinyml_lof_sq_distance_vec(const float *restrict a, const float *restrict b, int len) {
+    float acc = 0.0f;
+#pragma omp simd reduction(+ : acc)
     for (int i = 0; i < len; i++) {
-        dist += pow(vec_a[i] - vec_b[i], 2);
-        // dist += abs(vec_a[i] - vec_b[i]);
+        float d = a[i] - b[i];
+        acc = fmaf(d, d, acc);  // acc += d*d
     }
-    // return dist;
-    return sqrt(dist);
+    return acc;
 }
 
-// Helper struct to store distance and index
-typedef struct {
-    float dist;
-    int index;
-} distance_t;
-
-// Comparison function for qsort
-int compare_distances(const void *a, const void *b) {
-    float dist_a = ((distance_t *)a)->dist;
-    float dist_b = ((distance_t *)b)->dist;
-    if (dist_a < dist_b)
-        return -1;
-    if (dist_a > dist_b)
-        return 1;
-    return 0;
+// Optional: keep the original function, but make it use the fast inner loop
+float tinyml_lof_normal_distance_vec(float *vec_a, float *vec_b, int len) {
+    // Compute sqrt only when a true distance is required.
+    return sqrtf(tinyml_lof_sq_distance_vec(vec_a, vec_b, len));
 }
 
-// void tinyml_lof_k_neighbours_vec(float *vector, int *neighbours, tinyml_lof_config_t *config) {
-//     // This assumes config->n is not excessively large to cause stack overflow.
-//     // For very large n, allocate `all_distances` on the heap instead.
-//     distance_t all_distances[config->n];
+// Single-pass top-k selection (keeps a sorted array of size k). O(N * k) but only one distance per pair.
+// neigh_d2 keeps squared distances ascending; neigh_idx keeps indices aligned to neigh_d2.
+static inline void tinyml_lof_k_neighbours_topk(int a, int *neigh_idx, float *neigh_d2, tinyml_lof_config_t *config) {
+    const int k = config->parameter_k;
+    int size = 0;
 
-//     // 1. Calculate distance to all points
-//     for (int i = 0; i < config->n; i++) {
-//         all_distances[i].dist = tinyml_lof_normal_distance_vec(vector, LOF_VECTOR(i, config), config->vector_size);
-//         all_distances[i].index = i;
-//     }
+    const float *base = LOF_VECTOR(a, config);
+    for (int i = 0; i < config->n; i++) {
+        if (i == a)
+            continue;
 
-//     // 2. Sort distances in ascending order
-//     qsort(all_distances, config->n, sizeof(distance_t), compare_distances);
+        float d2 = tinyml_lof_sq_distance_vec(base, LOF_VECTOR(i, config), config->vector_size);
 
-//     // 3. Get the first k neighbours
-//     for (int k = 0; k < config->parameter_k; k++) {
-//         neighbours[k] = all_distances[k].index;
-//     }
-// }
+        if (size < k) {
+            // Insert in sorted order
+            int pos = size;
+            while (pos > 0 && d2 < neigh_d2[pos - 1]) {
+                neigh_d2[pos] = neigh_d2[pos - 1];
+                neigh_idx[pos] = neigh_idx[pos - 1];
+                pos--;
+            }
+            neigh_d2[pos] = d2;
+            neigh_idx[pos] = i;
+            size++;
+        } else if (d2 < neigh_d2[k - 1]) {
+            // Replace worst and keep sorted
+            int pos = k - 1;
+            while (pos > 0 && d2 < neigh_d2[pos - 1]) {
+                neigh_d2[pos] = neigh_d2[pos - 1];
+                neigh_idx[pos] = neigh_idx[pos - 1];
+                pos--;
+            }
+            neigh_d2[pos] = d2;
+            neigh_idx[pos] = i;
+        }
+    }
+}
 
 void tinyml_lof_k_neighbours_vec(float *vector, int *neighbours, tinyml_lof_config_t *config) {
     for (int k = 0; k < config->parameter_k; k++) {
@@ -178,25 +186,56 @@ void tinyml_lof_score_vectored(float **vector, tinyml_lof_config_t *config, floa
 }
 
 void tinyml_lof_learn(tinyml_lof_config_t *config) {
-    if (config->n < (config->parameter_k + 1))
+    // measure CPU time
+    clock_t start = clock();
+
+    const int n = config->n;
+    const int k = config->parameter_k;
+    if (n < (k + 1))
         return;
 
-// First, calculate all k-distances in parallel.
-#pragma omp parallel for
-    for (int i = 0; i < config->n; i++) {
-        int neighbours[10];
-        tinyml_lof_k_neighbours(i, neighbours, config);
-        // k-distance calculation
-        config->k_distance[i] = tinyml_lof_normal_distance_vec(LOF_VECTOR(i, config), LOF_VECTOR(neighbours[config->parameter_k - 1], config), config->vector_size);
+    // Allocate neighbor caches: n x k (indices and squared distances)
+    int *all_neigh = (int *)malloc((size_t)n * k * sizeof(int));
+    float *all_neigh_d2 = (float *)malloc((size_t)n * k * sizeof(float));
+    if (!all_neigh || !all_neigh_d2) {
+        free(all_neigh);
+        free(all_neigh_d2);
+        return;
     }
 
-// Then, calculate all lrd values in parallel.
-// This must be a separate loop because lrd calculation depends on k-distances of neighbors.
-#pragma omp parallel for
-    for (int i = 0; i < config->n; i++) {
-        int neighbours[10];
-        tinyml_lof_k_neighbours(i, neighbours, config);
-        // lrd distance calculation
-        config->lrd[i] = tinyml_lof_reachability_density(LOF_VECTOR(i, config), neighbours, config);
+// 1) Compute neighbors once and k-distance for every point
+#pragma omp parallel for schedule(static)
+    for (int i = 0; i < n; i++) {
+        int *neigh_idx = &all_neigh[i * k];
+        float *neigh_d2 = &all_neigh_d2[i * k];
+        tinyml_lof_k_neighbours_topk(i, neigh_idx, neigh_d2, config);
+
+        // k-distance is sqrt of the k-th smallest squared distance
+        config->k_distance[i] = sqrtf(neigh_d2[k - 1]);
     }
+
+// 2) Compute lrd using cached neighbors and their d2 (no extra distance recomputation)
+#pragma omp parallel for schedule(static)
+    for (int i = 0; i < n; i++) {
+        int *neigh_idx = &all_neigh[i * k];
+        float *neigh_d2 = &all_neigh_d2[i * k];
+
+        float sum_reach = 0.0f;
+        for (int j = 0; j < k; j++) {
+            int b = neigh_idx[j];
+            // reachability_distance = max(k_distance[b], distance(i,b))
+            float dist_ib = sqrtf(neigh_d2[j]);                   // reuse squared dist
+            float reach = fmaxf(config->k_distance[b], dist_ib);  // both are true distances
+            sum_reach += reach;
+        }
+        float lrd = sum_reach / (float)k;
+        config->lrd[i] = 1.0f / lrd;
+    }
+
+    free(all_neigh);
+    free(all_neigh_d2);
+
+    clock_t end = clock();
+    double cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC / 10;
+    printf("Time taken: %f seconds\n", cpu_time_used);
 }
