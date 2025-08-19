@@ -178,16 +178,24 @@ void tinyml_lof_score_vectored(float **vector, tinyml_lof_config_t *config, floa
 }
 
 void tinyml_lof_learn(tinyml_lof_config_t *config) {
-    int neighbours[10];
-
     if (config->n < (config->parameter_k + 1))
         return;
 
+// First, calculate all k-distances in parallel.
+#pragma omp parallel for
     for (int i = 0; i < config->n; i++) {
+        int neighbours[10];
         tinyml_lof_k_neighbours(i, neighbours, config);
-
         // k-distance calculation
         config->k_distance[i] = tinyml_lof_normal_distance_vec(LOF_VECTOR(i, config), LOF_VECTOR(neighbours[config->parameter_k - 1], config), config->vector_size);
+    }
+
+// Then, calculate all lrd values in parallel.
+// This must be a separate loop because lrd calculation depends on k-distances of neighbors.
+#pragma omp parallel for
+    for (int i = 0; i < config->n; i++) {
+        int neighbours[10];
+        tinyml_lof_k_neighbours(i, neighbours, config);
         // lrd distance calculation
         config->lrd[i] = tinyml_lof_reachability_density(LOF_VECTOR(i, config), neighbours, config);
     }
