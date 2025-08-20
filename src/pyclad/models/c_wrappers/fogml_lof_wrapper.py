@@ -57,7 +57,7 @@ class FogMLLOF:
         _lib (ctypes.CDLL): Loaded C library
     """
 
-    def __init__(self, k: int = 5, n_threads: int = 10):
+    def __init__(self, k: int = 10, n_threads: int = 10):
         """
         Initialize the FogML LOF model.
 
@@ -79,6 +79,7 @@ class FogMLLOF:
         self._data: Optional[ctypes.Array] = None
         self._k_distance: Optional[ctypes.Array] = None
         self._lrd: Optional[ctypes.Array] = None
+        self._has_score_matrix = False
 
         # Set OpenMP thread limit
         os.environ["OMP_NUM_THREADS"] = str(n_threads)
@@ -123,14 +124,25 @@ class FogMLLOF:
 
         # vectored version of tinyml_score
         self._lib.tinyml_lof_score_vectored.argtypes = [
-            ctypes.POINTER(
-                ctypes.POINTER(ctypes.c_float)
-            ),  # vector, 2d float array, outer layer is n_samples, inner layer is n_features
-            ctypes.POINTER(TinyMLLOFConfig),  # config
-            ctypes.POINTER(ctypes.c_float),  # scores
-            ctypes.c_int,  # n_samples
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
+            ctypes.POINTER(TinyMLLOFConfig),
+            ctypes.POINTER(ctypes.c_float),
+            ctypes.c_int,
         ]
         self._lib.tinyml_lof_score_vectored.restype = None
+
+        # Optional: contiguous matrix scorer
+        try:
+            self._lib.tinyml_lof_score_matrix.argtypes = [
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(TinyMLLOFConfig),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_int,
+            ]
+            self._lib.tinyml_lof_score_matrix.restype = None
+            self._has_score_matrix = True
+        except AttributeError:
+            self._has_score_matrix = False
 
     def fit(self, X: Union[np.ndarray, list]) -> "FogMLLOF":
         """
@@ -206,8 +218,6 @@ class FogMLLOF:
         Raises:
             ValueError: If the model is not fitted or input is invalid
         """
-        # fake return 0, for testing
-        return np.zeros(X.shape[0], dtype=np.float32)
 
         if not self.is_fitted:
             raise ValueError("Model must be fitted before calling decision_function")
@@ -223,7 +233,6 @@ class FogMLLOF:
             raise ValueError("X must be a 1D or 2D array")
 
         n_samples, n_features = X.shape
-
         if n_features != self.config.vector_size:
             raise ValueError(
                 f"Expected {self.config.vector_size} features, got {n_features}"
@@ -231,18 +240,25 @@ class FogMLLOF:
 
         # Compute LOF scores
         scores = np.zeros(n_samples, dtype=np.float32)
-
-        # Call the vectored version
-        vector_ptr = (ctypes.POINTER(ctypes.c_float) * n_samples)()
         scores_ptr = (ctypes.c_float * n_samples)()
-        for i in range(n_samples):
-            vector_ptr[i] = (ctypes.c_float * n_features)(*X[i])
-        self._lib.tinyml_lof_score_vectored(
-            vector_ptr, ctypes.byref(self.config), scores_ptr, n_samples
-        )
-        scores = np.ctypeslib.as_array(scores_ptr, shape=(n_samples,))
 
-        return scores
+        if self._has_score_matrix:
+            Xc = np.ascontiguousarray(X, dtype=np.float32)
+            base = (ctypes.c_float * (n_samples * n_features)).from_buffer(Xc)
+            self._lib.tinyml_lof_score_matrix(
+                base, ctypes.byref(self.config), scores_ptr, n_samples
+            )
+        else:
+            # Fallback: keep row buffers alive
+            row_bufs = [(ctypes.c_float * n_features)(*X[i]) for i in range(n_samples)]
+            vector_ptr = (ctypes.POINTER(ctypes.c_float) * n_samples)()
+            for i in range(n_samples):
+                vector_ptr[i] = row_bufs[i]
+            self._lib.tinyml_lof_score_vectored(
+                vector_ptr, ctypes.byref(self.config), scores_ptr, n_samples
+            )
+
+        return np.ctypeslib.as_array(scores_ptr, shape=(n_samples,))
 
     def predict(self, X: Union[np.ndarray, list], threshold: float = 1.5) -> np.ndarray:
         """

@@ -81,6 +81,42 @@ static inline void tinyml_lof_k_neighbours_topk(int a, int *neigh_idx, float *ne
     }
 }
 
+// Top-k neighbors for an external query vector against the training set.
+// Returns indices and squared distances (ascending).
+static inline void tinyml_lof_k_neighbours_topk_query(const float *restrict query,
+                                                      int *restrict neigh_idx,
+                                                      float *restrict neigh_d2,
+                                                      const tinyml_lof_config_t *restrict config) {
+    const int k = config->parameter_k;
+    int size = 0;
+
+    for (int i = 0; i < config->n; i++) {
+        const float *base = LOF_VECTOR(i, config);
+        float d2 = tinyml_lof_sq_distance_vec(query, base, config->vector_size);
+
+        if (size < k) {
+            int pos = size;
+            while (pos > 0 && d2 < neigh_d2[pos - 1]) {
+                neigh_d2[pos] = neigh_d2[pos - 1];
+                neigh_idx[pos] = neigh_idx[pos - 1];
+                pos--;
+            }
+            neigh_d2[pos] = d2;
+            neigh_idx[pos] = i;
+            size++;
+        } else if (d2 < neigh_d2[k - 1]) {
+            int pos = k - 1;
+            while (pos > 0 && d2 < neigh_d2[pos - 1]) {
+                neigh_d2[pos] = neigh_d2[pos - 1];
+                neigh_idx[pos] = neigh_idx[pos - 1];
+                pos--;
+            }
+            neigh_d2[pos] = d2;
+            neigh_idx[pos] = i;
+        }
+    }
+}
+
 void tinyml_lof_k_neighbours_vec(float *vector, int *neighbours, tinyml_lof_config_t *config) {
     for (int k = 0; k < config->parameter_k; k++) {
         float max = TINYML_MAX_DISTANCE;
@@ -179,9 +215,78 @@ float tinyml_lof_score(float *vector, tinyml_lof_config_t *config) {
 }
 
 void tinyml_lof_score_vectored(float **vector, tinyml_lof_config_t *config, float *scores, int size) {
-#pragma omp parallel for
-    for (int i = 0; i < size; i++) {
-        scores[i] = tinyml_lof_score(vector[i], config);
+    // measure running time
+    clock_t start = clock();
+
+    const int k = config->parameter_k;
+    const float *restrict kdist = config->k_distance;
+    const float *restrict lrd = config->lrd;
+
+#pragma omp parallel for schedule(static)
+    for (int qi = 0; qi < size; qi++) {
+        // Per-query top-k (on stack, no malloc). Requires C99 VLA.
+        int neigh_idx[k];
+        float neigh_d2[k];
+
+        tinyml_lof_k_neighbours_topk_query(vector[qi], neigh_idx, neigh_d2, config);
+
+        // Sum neighbor lrd
+        float sum_lrd = 0.0f;
+        for (int j = 0; j < k; j++) {
+            sum_lrd += lrd[neigh_idx[j]];
+        }
+        float mean_lrd_neighbors = sum_lrd / (float)k;
+
+        // Compute reachability density of the query using cached distances
+        float sum_reach = 0.0f;
+        for (int j = 0; j < k; j++) {
+            int b = neigh_idx[j];
+            float dist = sqrtf(neigh_d2[j]);  // only k sqrts per query
+            float reach = fmaxf(kdist[b], dist);
+            sum_reach += reach;
+        }
+        float lrd_query = 1.0f / (sum_reach / (float)k);
+
+        scores[qi] = mean_lrd_neighbors / lrd_query;
+    }
+
+    // measure running time
+    clock_t end = clock();
+    double cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    // printf("Score Time taken: %f seconds\n", cpu_time_used);  // noisy, disable in production
+}
+
+// New: contiguous matrix scorer to avoid float** overhead from Python
+void tinyml_lof_score_matrix(const float *restrict vectors,
+                             tinyml_lof_config_t *restrict config,
+                             float *restrict scores,
+                             int size) {
+    const int d = config->vector_size;
+    const int k = config->parameter_k;
+    const float *restrict kdist = config->k_distance;
+    const float *restrict lrd = config->lrd;
+
+#pragma omp parallel for schedule(static)
+    for (int qi = 0; qi < size; qi++) {
+        const float *query = &vectors[(size_t)qi * d];
+
+        int neigh_idx[k];
+        float neigh_d2[k];
+        tinyml_lof_k_neighbours_topk_query(query, neigh_idx, neigh_d2, config);
+
+        float sum_lrd = 0.0f;
+        for (int j = 0; j < k; j++) sum_lrd += lrd[neigh_idx[j]];
+        float mean_lrd_neighbors = sum_lrd / (float)k;
+
+        float sum_reach = 0.0f;
+        for (int j = 0; j < k; j++) {
+            int b = neigh_idx[j];
+            float dist = sqrtf(neigh_d2[j]);
+            float reach = fmaxf(kdist[b], dist);
+            sum_reach += reach;
+        }
+        float lrd_query = 1.0f / (sum_reach / (float)k);
+        scores[qi] = mean_lrd_neighbors / lrd_query;
     }
 }
 
@@ -237,5 +342,5 @@ void tinyml_lof_learn(tinyml_lof_config_t *config) {
 
     clock_t end = clock();
     double cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC / 10;
-    printf("Time taken: %f seconds\n", cpu_time_used);
+    // printf("Learn Time taken: %f seconds\n", cpu_time_used);
 }

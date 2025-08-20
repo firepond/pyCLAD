@@ -18,13 +18,17 @@ from pyclad.models.model import Model
 
 class LOFModel(Model):
     def __init__(
-        self, n_neighbors: int = 20, contamination: float = 0.1, algorithm="auto"
+        self,
+        n_neighbors: int = 10,
+        contamination: float = 0.1,
+        algorithm="auto",
+        metric="euclidean",
     ):
         self._model = LocalOutlierFactor(
             n_neighbors=n_neighbors,
             contamination=contamination,
             novelty=True,
-            metric="chebyshev",
+            metric=metric,
             algorithm=algorithm,
         )
 

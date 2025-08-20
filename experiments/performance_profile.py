@@ -9,11 +9,15 @@ import seaborn as sns
 
 import pathlib
 
+sys.path.append("../src/")
 
-print(np.show_config())
+from pyclad.models.lof import LOFModel
+from pyclad.strategies.replay.buffers.adaptive_balanced import (
+    AdaptiveBalancedReplayBuffer,
+)
+from pyclad.strategies.replay.selection.random import RandomSelection
 
 # set pyclad import path to "../src/pyclad"
-sys.path.append("../src/")
 import pyclad
 
 # Datasets
@@ -42,16 +46,19 @@ from pyclad.metrics.continual.backward_transfer import BackwardTransfer
 from pyclad.metrics.continual.forward_transfer import ForwardTransfer
 from pyclad.output.json_writer import JsonOutputWriter
 from pyclad.strategies.replay.candi import CandiStrategy
+from pyclad.strategies.replay.replay import ReplayEnhancedStrategy
 
-dataset = WindEnergyDataset(dataset_type="random_anomalies")
+# dataset = WindEnergyDataset(dataset_type="random_anomalies")
+dataset = NslKddDataset(dataset_type="random_anomalies")
 
-# model = FogMLLOFModel()
-model = LocalOutlierFactorAdapter()
+model = FogMLLOFModel()
+# model = LOFModel(metric="euclidean")
 
-strategy = CandiStrategy(
+max_size = 1000
+
+strategy = ReplayEnhancedStrategy(
     model,
-    max_buffer_size=1000,
-    threshold_ratio=0.001,
+    AdaptiveBalancedReplayBuffer(selection_method=RandomSelection(), max_size=max_size),
 )
 
 # Run the experiment

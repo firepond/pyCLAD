@@ -14,7 +14,7 @@ all: $(LOF_OBJ)
 # rule to build shared objects
 $(ODIR)/%.so: %.c
 		mkdir -p $(@D)
-		$(CC) -O2 -fPIC -fopenmp -shared -o $@ $< $(LDFLAGS)
+		$(CC) -Ofast -ffast-math  -funroll-loops -fPIC -mcpu=apple-m2 -fopenmp -shared -o $@ $< $(LDFLAGS)
 
 .PHONY: clean
 clean:

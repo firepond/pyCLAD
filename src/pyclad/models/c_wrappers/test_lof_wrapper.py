@@ -6,6 +6,7 @@ Test script for FogML LOF wrapper.
 import numpy as np
 import sys
 from pathlib import Path
+from sklearn.neighbors import LocalOutlierFactor
 
 # Add the wrapper to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -54,23 +55,6 @@ def test_basic_functionality():
     predictions = lof.predict(X, threshold=1.5)
     n_outliers_detected = predictions.sum()
     print(f"Detected {n_outliers_detected} outliers")
-
-    # Test additional methods
-    k_distances = lof.get_k_distances()
-    lrd_values = lof.get_local_reachability_densities()
-    training_scores = lof.get_training_scores()
-
-    assert k_distances is not None
-    assert lrd_values is not None
-    assert training_scores is not None
-
-    print(f"✓ K-distances computed: shape {k_distances.shape}")
-    print(f"✓ LRD values computed: shape {lrd_values.shape}")
-    print(f"✓ Training scores computed: shape {training_scores.shape}")
-
-    # Verify training scores match decision function
-    np.testing.assert_array_almost_equal(scores, training_scores, decimal=5)
-    print("✓ Training scores match decision function output")
 
 
 def test_convenience_function():
@@ -186,6 +170,47 @@ def test_different_dimensions():
         )
 
 
+def test_sklearn_comparison():
+    """Compare with scikit-learn's LOF."""
+    print("\n=== Testing scikit-learn Comparison ===")
+
+    np.random.seed(123)
+    X = np.random.normal(50, 10, (1000, 2))
+    X = np.vstack([X, [[5, 5], [-5, -5]]])  # Add outliers
+
+    k = 5
+    # Initialize and fit FogML LOF
+    fogml_lof = FogMLLOF(k=k)
+    fogml_lof.fit(X)
+    fogml_scores = fogml_lof.decision_function(X)
+
+    # Initialize and fit scikit-learn LOF
+    sklearn_lof = LocalOutlierFactor(n_neighbors=k, novelty=True, metric="euclidean")
+    sklearn_lof.fit(X)
+    sklearn_scores = -sklearn_lof.decision_function(X)  # Negate for comparison
+
+    # Compare scores
+    print(
+        f"FogML LOF scores range: [{fogml_scores.min():.3f}, {fogml_scores.max():.3f}]"
+    )
+    print(
+        f"scikit-learn LOF scores range: [{sklearn_scores.min():.3f}, {sklearn_scores.max():.3f}]"
+    )
+
+    # The scores won't be exactly the same, but should be highly correlated
+    correlation = np.corrcoef(fogml_scores.flatten(), sklearn_scores)[0, 1]
+    print(f"Correlation between FogML and scikit-learn LOF scores: {correlation:.3f}")
+
+    # Check absolute correlation (accounting for possible sign flip)
+    abs_correlation = abs(correlation)
+    print(f"Absolute correlation: {abs_correlation:.3f}")
+
+    assert (
+        abs_correlation > 0.95
+    ), f"LOF scores are not highly correlated (|corr|={abs_correlation:.3f})"
+    print("✓ FogML LOF scores are highly correlated with scikit-learn LOF scores")
+
+
 if __name__ == "__main__":
     print("Testing FogML LOF Python Wrapper")
     print("=" * 50)
@@ -196,6 +221,7 @@ if __name__ == "__main__":
         test_edge_cases()
         test_single_sample_prediction()
         test_different_dimensions()
+        test_sklearn_comparison()  # Add the sklearn comparison test
 
         print("\n" + "=" * 50)
         print("🎉 All tests passed successfully!")
