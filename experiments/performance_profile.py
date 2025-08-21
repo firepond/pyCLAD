@@ -1,3 +1,4 @@
+from time import time
 import os
 
 import sys
@@ -11,6 +12,7 @@ import pathlib
 
 sys.path.append("../src/")
 
+from pyclad.data import dataset
 from pyclad.models.lof import LOFModel
 from pyclad.strategies.replay.buffers.adaptive_balanced import (
     AdaptiveBalancedReplayBuffer,
@@ -49,10 +51,12 @@ from pyclad.strategies.replay.candi import CandiStrategy
 from pyclad.strategies.replay.replay import ReplayEnhancedStrategy
 
 # dataset = WindEnergyDataset(dataset_type="random_anomalies")
-dataset = NslKddDataset(dataset_type="random_anomalies")
+# dataset = NslKddDataset(dataset_type="random_anomalies")
+dataset = UnswDataset(dataset_type="random_anomalies")
 
-model = FogMLLOFModel()
-# model = LOFModel(metric="euclidean")
+n_neighbors = 5
+model = FogMLLOFModel(k=n_neighbors)
+# model = LOFModel(metric="euclidean", n_neighbors=n_neighbors)
 
 max_size = 1000
 
@@ -70,6 +74,10 @@ callbacks = [
     TimeEvaluationCallback(),
 ]
 scenario = ConceptAwareScenario(dataset=dataset, strategy=strategy, callbacks=callbacks)
+start_time = time.time()
 scenario.run()
+end_time = time.time()
+
+print(f"Time taken: {end_time - start_time:.2f} seconds")
 
 callbacks[0].print_continual_average()

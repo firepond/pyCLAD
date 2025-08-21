@@ -43,7 +43,7 @@ class ReplayEnhancedStrategy(
             if len(self._buffer.data()) > 0
             else data
         )
-        print(f"Fitting model on combined data of shape: {combined_data.shape}")
+        # print(f"Fitting model on combined data of shape: {combined_data.shape}")
         self._model.fit(combined_data)
         self._buffer.update(data)
 

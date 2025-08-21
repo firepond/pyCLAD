@@ -199,8 +199,8 @@ class FogMLLOF:
 
         learn_time = perf_counter() - start_time
 
-        print(f"Initialization time: {init_time:.4f} seconds")
-        print(f"Learning time: {learn_time:.4f} seconds")
+        # print(f"Initialization time: {init_time:.4f} seconds")
+        # print(f"Learning time: {learn_time:.4f} seconds")
 
         self.is_fitted = True
         return self
@@ -239,17 +239,16 @@ class FogMLLOF:
             )
 
         # Compute LOF scores
-        scores = np.zeros(n_samples, dtype=np.float32)
-        scores_ptr = (ctypes.c_float * n_samples)()
+        scores = np.empty(n_samples, dtype=np.float32)
+        scores_ptr = scores.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
 
         if self._has_score_matrix:
             Xc = np.ascontiguousarray(X, dtype=np.float32)
-            base = (ctypes.c_float * (n_samples * n_features)).from_buffer(Xc)
+            base = Xc.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
             self._lib.tinyml_lof_score_matrix(
                 base, ctypes.byref(self.config), scores_ptr, n_samples
             )
         else:
-            # Fallback: keep row buffers alive
             row_bufs = [(ctypes.c_float * n_features)(*X[i]) for i in range(n_samples)]
             vector_ptr = (ctypes.POINTER(ctypes.c_float) * n_samples)()
             for i in range(n_samples):
@@ -257,8 +256,7 @@ class FogMLLOF:
             self._lib.tinyml_lof_score_vectored(
                 vector_ptr, ctypes.byref(self.config), scores_ptr, n_samples
             )
-
-        return np.ctypeslib.as_array(scores_ptr, shape=(n_samples,))
+        return scores
 
     def predict(self, X: Union[np.ndarray, list], threshold: float = 1.5) -> np.ndarray:
         """

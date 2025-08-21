@@ -32,3 +32,9 @@ class ConceptsDataset(Dataset):
         # get the max count of samples in all train concepts
         max_count = max([concept.data.shape[0] for concept in self._train_concepts])
         return max_count
+
+    def print_shapes(self):
+        for concept in self._train_concepts:
+            print(f"Train concept shape: {concept.data.shape}")
+        for concept in self._test_concepts:
+            print(f"Test concept shape: {concept.data.shape}")
