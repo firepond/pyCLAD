@@ -1,0 +1,6 @@
+Using model: FogMLLOFModel(k=5, threshold=1.5, not fitted)
+Time taken: 89.69 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.7248237839158896
+  BackwardTransfer: -0.030866362167106497
+  ForwardTransfer: 0.3483402197041238

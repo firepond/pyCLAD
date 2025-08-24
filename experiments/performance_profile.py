@@ -1,6 +1,5 @@
-from time import time
 import os
-
+import time
 import sys
 import numpy as np
 import json
@@ -52,32 +51,49 @@ from pyclad.strategies.replay.replay import ReplayEnhancedStrategy
 
 # dataset = WindEnergyDataset(dataset_type="random_anomalies")
 # dataset = NslKddDataset(dataset_type="random_anomalies")
-dataset = UnswDataset(dataset_type="random_anomalies")
+datasets = []
+datasets.append(UnswDataset(dataset_type="random_anomalies"))
+datasets.append(NslKddDataset(dataset_type="random_anomalies"))
+datasets.append(WindEnergyDataset(dataset_type="random_anomalies"))
+datasets.append(EnergyPlantsDataset(dataset_type="random_anomalies"))
 
 n_neighbors = 5
+models = []
 model = FogMLLOFModel(k=n_neighbors)
-# model = LOFModel(metric="euclidean", n_neighbors=n_neighbors)
+models.append(model)
+
+model = LOFModel(metric="euclidean", n_neighbors=n_neighbors)
+models.append(model)
+# model = LocalOutlierFactorAdapter(n_neighbors=n_neighbors)
 
 max_size = 1000
 
-strategy = ReplayEnhancedStrategy(
-    model,
-    AdaptiveBalancedReplayBuffer(selection_method=RandomSelection(), max_size=max_size),
-)
+for dataset in datasets:
+    for model in models:
+        print(f"Running experiment for {dataset.name} with {model.name}")
+        strategy = ReplayEnhancedStrategy(
+            model,
+            AdaptiveBalancedReplayBuffer(
+                selection_method=RandomSelection(), max_size=max_size
+            ),
+        )
 
-# Run the experiment
-callbacks = [
-    ConceptMetricCallback(
-        base_metric=RocAuc(),
-        metrics=[ContinualAverage(), BackwardTransfer(), ForwardTransfer()],
-    ),
-    TimeEvaluationCallback(),
-]
-scenario = ConceptAwareScenario(dataset=dataset, strategy=strategy, callbacks=callbacks)
-start_time = time.time()
-scenario.run()
-end_time = time.time()
+        # Run the experiment
+        callbacks = [
+            ConceptMetricCallback(
+                base_metric=RocAuc(),
+                metrics=[ContinualAverage(), BackwardTransfer(), ForwardTransfer()],
+            ),
+            TimeEvaluationCallback(),
+        ]
+        scenario = ConceptAwareScenario(
+            dataset=dataset, strategy=strategy, callbacks=callbacks
+        )
+        start_time = time.time()
+        scenario.run()
+        end_time = time.time()
 
-print(f"Time taken: {end_time - start_time:.2f} seconds")
+        print(f"Time taken: {end_time - start_time:.2f} seconds")
 
-callbacks[0].print_continual_average()
+        callbacks[0].print_continual_average()
+        time.sleep(10)

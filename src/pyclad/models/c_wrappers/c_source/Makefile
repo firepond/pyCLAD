@@ -1,8 +1,9 @@
 ## compiler - Use clang from Homebrew's llvm installation
-CC=/opt/homebrew/opt/llvm/bin/clang
+# CC=/opt/homebrew/opt/llvm/bin/clang
+CC = clang
 
 ## Linker flags to find the OpenMP library
-LDFLAGS = -L/opt/homebrew/opt/llvm/lib
+# LDFLAGS = -L/opt/homebrew/opt/llvm/lib
 
 # directories
 ODIR=lib
@@ -13,8 +14,10 @@ LOF_OBJ = $(ODIR)/fogml_lof.so
 all: $(LOF_OBJ)
 # rule to build shared objects
 $(ODIR)/%.so: %.c
-		mkdir -p $(@D)
-		$(CC) -Ofast -ffast-math  -funroll-loops -fPIC -mcpu=apple-m2 -fopenmp -arch arm64 -shared -o $@ $< $(LDFLAGS)
+# 		mkdir -p $(@D)
+# 		$(CC) -Ofast -ffast-math  -funroll-loops -fPIC -mcpu=apple-m2 -fopenmp -arch arm64 -shared -o $@ $< $(LDFLAGS)
+# 		$(CC) -Ofast -ffast-math  -funroll-loops -fPIC  -fopenmp -shared -o $@ $< $(LDFLAGS)
+		$(CC) -Ofast -flto -fPIC  -shared -o $@ $< $(LDFLAGS)
 
 .PHONY: clean
 clean:

@@ -77,8 +77,9 @@ static inline float tinyml_lof_sq_distance_vec(const float *restrict a, const fl
     // Portable path: simple form that auto-vectorizes well
     float acc0 = 0.0f, acc1 = 0.0f, acc2 = 0.0f, acc3 = 0.0f;
     int i = 0;
-#pragma omp simd reduction(+ : acc0, acc1, acc2, acc3)
-    for (; i + 16 <= len; i += 16) {
+    int const len_minus_16 = len - 16;
+    // #pragma omp simd reduction(+ : acc0, acc1, acc2, acc3)
+    for (i = 0; i <= len_minus_16; i += 16) {
         float d0 = a[i + 0] - b[i + 0];
         acc0 += d0 * d0;
         float d1 = a[i + 1] - b[i + 1];
@@ -113,7 +114,8 @@ static inline float tinyml_lof_sq_distance_vec(const float *restrict a, const fl
         acc3 += dF * dF;
     }
     float acc = acc0 + acc1 + acc2 + acc3;
-    for (; i < len; ++i) {
+    int t = i;
+    for (i = t; i < len; ++i) {
         float d = a[i] - b[i];
         acc += d * d;
     }
@@ -309,7 +311,7 @@ void tinyml_lof_score_vectored(float **vector, tinyml_lof_config_t *config, floa
     const float *restrict lrd = config->lrd;
 
     // Use threads only when batch is large enough
-#pragma omp parallel for if (size >= 64) schedule(static)
+    // #pragma omp parallel for if (size >= 64) schedule(static)
     for (int qi = 0; qi < size; qi++) {
         int neigh_idx[k];
         float neigh_d2[k];
@@ -339,8 +341,9 @@ void tinyml_lof_score_matrix(const float *restrict vectors,
     const int k = config->parameter_k;
     const float *restrict kdist = config->k_distance;
     const float *restrict lrd = config->lrd;
+    // printf("data size:%d\n", size);
 
-#pragma omp parallel for schedule(static)
+    // #pragma omp parallel for schedule(static)
     for (int qi = 0; qi < size; qi++) {
         const float *query = &vectors[(size_t)qi * d];
 
@@ -382,8 +385,8 @@ void tinyml_lof_learn(tinyml_lof_config_t *config) {
         return;
     }
 
-// 1) Compute neighbors once and k-distance for every point
-#pragma omp parallel for schedule(static)
+    // 1) Compute neighbors once and k-distance for every point
+    // #pragma omp parallel for schedule(static)
     for (int i = 0; i < n; i++) {
         int *neigh_idx = &all_neigh[i * k];
         float *neigh_d2 = &all_neigh_d2[i * k];
@@ -393,8 +396,8 @@ void tinyml_lof_learn(tinyml_lof_config_t *config) {
         config->k_distance[i] = sqrtf(neigh_d2[k - 1]);
     }
 
-// 2) Compute lrd using cached neighbors and their d2 (no extra distance recomputation)
-#pragma omp parallel for schedule(static)
+    // 2) Compute lrd using cached neighbors and their d2 (no extra distance recomputation)
+    // #pragma omp parallel for schedule(static)
     for (int i = 0; i < n; i++) {
         int *neigh_idx = &all_neigh[i * k];
         float *neigh_d2 = &all_neigh_d2[i * k];

@@ -1,0 +1,48 @@
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.unsw_dataset.UnswDataset object at 0x7911b0998830>> with <bound method FogMLLOFModel.name of FogMLLOFModel(k=5, threshold=1.5, not fitted)>
+Time taken: 89.58 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.7176147752737891
+  BackwardTransfer: -0.029975489431769108
+  ForwardTransfer: 0.36415139036317035
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.unsw_dataset.UnswDataset object at 0x7911b0998830>> with <bound method LOFModel.name of <pyclad.models.lof.LOFModel object at 0x7911b099ae40>>
+Time taken: 91.12 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.7052226205845293
+  BackwardTransfer: -0.025324477695334736
+  ForwardTransfer: 0.3320554513441238
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.nsl_kdd_dataset.NslKddDataset object at 0x7911b8d72660>> with <bound method FogMLLOFModel.name of FogMLLOFModel(k=5, threshold=1.5, fitted)>
+Time taken: 15.24 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.84269878930783
+  BackwardTransfer: -0.011624861844786302
+  ForwardTransfer: 0.2311841429285635
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.nsl_kdd_dataset.NslKddDataset object at 0x7911b8d72660>> with <bound method LOFModel.name of <pyclad.models.lof.LOFModel object at 0x7911b099ae40>>
+Time taken: 17.41 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.8194224440425831
+  BackwardTransfer: -0.006424476108487732
+  ForwardTransfer: 0.24732790210904004
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.wind_energy_dataset.WindEnergyDataset object at 0x7911b099aa50>> with <bound method FogMLLOFModel.name of FogMLLOFModel(k=5, threshold=1.5, fitted)>
+Time taken: 5.09 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.9729832980435453
+  BackwardTransfer: -0.010992289374853536
+  ForwardTransfer: 0.5342553694925238
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.wind_energy_dataset.WindEnergyDataset object at 0x7911b099aa50>> with <bound method LOFModel.name of <pyclad.models.lof.LOFModel object at 0x7911b099ae40>>
+Time taken: 5.80 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.9708937190510671
+  BackwardTransfer: -0.011725915036405122
+  ForwardTransfer: 0.5410100235488086
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.energy_plants_dataset.EnergyPlantsDataset object at 0x7911b0998980>> with <bound method FogMLLOFModel.name of FogMLLOFModel(k=5, threshold=1.5, fitted)>
+Time taken: 13.50 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.9558923890063425
+  BackwardTransfer: -0.004480902777777763
+  ForwardTransfer: 0.6041773457687339
+Running experiment for <bound method ConceptsDataset.name of <pyclad.data.datasets.energy_plants_dataset.EnergyPlantsDataset object at 0x7911b0998980>> with <bound method LOFModel.name of <pyclad.models.lof.LOFModel object at 0x7911b099ae40>>
+Time taken: 19.00 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.9560441298890062
+  BackwardTransfer: -0.0046209019702842516
+  ForwardTransfer: 0.5942380329457364

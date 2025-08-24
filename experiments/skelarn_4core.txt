@@ -1,0 +1,6 @@
+Using model: <pyclad.models.lof.LOFModel object at 0x7f3a1d45a7b0>
+Time taken: 41.29 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.7169343608465747
+  BackwardTransfer: -0.023324196125052966
+  ForwardTransfer: 0.3328438630864969

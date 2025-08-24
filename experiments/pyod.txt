@@ -1,0 +1,5 @@
+Time taken: 17.34 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.723100005686863
+  BackwardTransfer: -0.029413579142740502
+  ForwardTransfer: 0.3585666703977408

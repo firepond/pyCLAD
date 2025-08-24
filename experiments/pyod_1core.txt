@@ -1,0 +1,6 @@
+Using model: <pyclad.models.adapters.pyod_adapters.LocalOutlierFactorAdapter object at 0x7e794f47dbe0>
+Time taken: 91.32 seconds
+Lifelong Learning Metrics:
+  ContinualAverage: 0.7329124846507769
+  BackwardTransfer: -0.015365329691318763
+  ForwardTransfer: 0.34615803189698474
