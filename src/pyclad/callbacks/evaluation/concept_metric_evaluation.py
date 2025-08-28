@@ -87,3 +87,12 @@ class ConceptMetricCallback(Callback, InfoProvider):
         print("Lifelong Learning Metrics:")
         for metric_name, metric_value in lifelong_learning_metrics.items():
             print(f"  {metric_name}: {metric_value}")
+
+    def get_metrics(self):
+        concept_level_matrix = self._transform_to_ordered_matrix(
+            self._metric_matrix, self._learned_concepts
+        )
+        lifelong_learning_metrics = {
+            m.name(): m.compute(concept_level_matrix) for m in self._metrics
+        }
+        return lifelong_learning_metrics

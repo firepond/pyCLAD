@@ -51,49 +51,73 @@ from pyclad.strategies.replay.replay import ReplayEnhancedStrategy
 
 # dataset = WindEnergyDataset(dataset_type="random_anomalies")
 # dataset = NslKddDataset(dataset_type="random_anomalies")
-datasets = []
-datasets.append(UnswDataset(dataset_type="random_anomalies"))
-datasets.append(NslKddDataset(dataset_type="random_anomalies"))
-datasets.append(WindEnergyDataset(dataset_type="random_anomalies"))
-datasets.append(EnergyPlantsDataset(dataset_type="random_anomalies"))
+DATASETS = {
+    "energy": EnergyPlantsDataset,
+    "nsl-kdd": NslKddDataset,
+    "unsw": UnswDataset,
+    "wind": WindEnergyDataset,
+}
+
+# possible scenarios: "clustered_with_closest_assignment", "random_anomalies", "clustered_with_random_assignment"
+DATASET_TYPE = [
+    "random_anomalies",
+    "clustered_with_closest_assignment",
+    "clustered_with_random_assignment",
+]
 
 n_neighbors = 5
-models = []
-model = FogMLLOFModel(k=n_neighbors)
-models.append(model)
-
-model = LOFModel(metric="euclidean", n_neighbors=n_neighbors)
-models.append(model)
-# model = LocalOutlierFactorAdapter(n_neighbors=n_neighbors)
-
 max_size = 1000
+MODELS = {"FogMLLOFModel": FogMLLOFModel, "LOFModel": LOFModel}  # init in loop
 
-for dataset in datasets:
-    for model in models:
-        print(f"Running experiment for {dataset.name} with {model.name}")
-        strategy = ReplayEnhancedStrategy(
-            model,
-            AdaptiveBalancedReplayBuffer(
-                selection_method=RandomSelection(), max_size=max_size
-            ),
-        )
 
-        # Run the experiment
-        callbacks = [
-            ConceptMetricCallback(
-                base_metric=RocAuc(),
-                metrics=[ContinualAverage(), BackwardTransfer(), ForwardTransfer()],
-            ),
-            TimeEvaluationCallback(),
-        ]
-        scenario = ConceptAwareScenario(
-            dataset=dataset, strategy=strategy, callbacks=callbacks
-        )
-        start_time = time.time()
-        scenario.run()
-        end_time = time.time()
+results_file = open("results.txt", "w+")
 
-        print(f"Time taken: {end_time - start_time:.2f} seconds")
 
-        callbacks[0].print_continual_average()
-        time.sleep(10)
+for dataset_name, dataset_class in DATASETS.items():
+    for model_name, model in MODELS.items():
+        for dataset_type in DATASET_TYPE:
+            print(
+                f"Running experiment for {dataset_name} with {model_name} in scenario {dataset_type}"
+            )
+            results_file.write(
+                f"Running experiment for {dataset_name} with {model_name} in scenario {dataset_type}\n"
+            )
+            if model_name == "FogMLLOFModel":
+                model = FogMLLOFModel(k=n_neighbors)
+            else:
+                model = LOFModel(n_neighbors=n_neighbors)
+            dataset = dataset_class(dataset_type=dataset_type)
+            strategy = ReplayEnhancedStrategy(
+                model,
+                AdaptiveBalancedReplayBuffer(
+                    selection_method=RandomSelection(), max_size=max_size
+                ),
+            )
+
+            # Run the experiment
+            callbacks = [
+                ConceptMetricCallback(
+                    base_metric=RocAuc(),
+                    metrics=[ContinualAverage(), BackwardTransfer(), ForwardTransfer()],
+                ),
+                TimeEvaluationCallback(),
+            ]
+            scenario = ConceptAwareScenario(
+                dataset=dataset, strategy=strategy, callbacks=callbacks
+            )
+            start_time = time.time()
+            scenario.run()
+            end_time = time.time()
+
+            print(f"Time taken: {end_time - start_time:.2f} seconds")
+            results_file.write(f"Time taken: {end_time - start_time:.2f} seconds\n")
+
+            callbacks[0].print_continual_average()
+            metrics = callbacks[0].get_metrics()
+            for metric_name, metric_value in metrics.items():
+                results_file.write(f"{metric_name}: {metric_value}\n")
+            # flush
+            results_file.flush()
+            time.sleep(10)
+
+results_file.close()

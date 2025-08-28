@@ -1,0 +1,120 @@
+Running experiment for energy with FogMLLOFModel in scenario random_anomalies
+Time taken: 13.50 seconds
+ContinualAverage: 0.9552567719344609
+BackwardTransfer: -0.005046366279069768
+ForwardTransfer: 0.5987534802971576
+Running experiment for energy with FogMLLOFModel in scenario clustered_with_closest_assignment
+Time taken: 13.23 seconds
+ContinualAverage: 0.9247423403416472
+BackwardTransfer: -0.009444342431606582
+ForwardTransfer: 0.7548217102209409
+Running experiment for energy with FogMLLOFModel in scenario clustered_with_random_assignment
+Time taken: 13.24 seconds
+ContinualAverage: 0.9399492701941279
+BackwardTransfer: -0.005101349480260891
+ForwardTransfer: 0.6204131480855994
+Running experiment for energy with LOFModel in scenario random_anomalies
+Time taken: 18.59 seconds
+ContinualAverage: 0.9560704082980971
+BackwardTransfer: -0.004385477228682176
+ForwardTransfer: 0.5928988856589148
+Running experiment for energy with LOFModel in scenario clustered_with_closest_assignment
+Time taken: 18.05 seconds
+ContinualAverage: 0.925609408300117
+BackwardTransfer: -0.00915578577632173
+ForwardTransfer: 0.7592225744796721
+Running experiment for energy with LOFModel in scenario clustered_with_random_assignment
+Time taken: 18.46 seconds
+ContinualAverage: 0.9440398195378635
+BackwardTransfer: -0.0038067739545973103
+ForwardTransfer: 0.6194289841269842
+Running experiment for nsl-kdd with FogMLLOFModel in scenario random_anomalies
+Time taken: 15.25 seconds
+ContinualAverage: 0.8631475595236203
+BackwardTransfer: -0.005914430915279729
+ForwardTransfer: 0.23991457305617594
+Running experiment for nsl-kdd with FogMLLOFModel in scenario clustered_with_closest_assignment
+Time taken: 12.22 seconds
+ContinualAverage: 0.8873900851223685
+BackwardTransfer: -0.009360523805968232
+ForwardTransfer: 0.38412591274733476
+Running experiment for nsl-kdd with FogMLLOFModel in scenario clustered_with_random_assignment
+Time taken: 12.20 seconds
+ContinualAverage: 0.8727445111577375
+BackwardTransfer: -0.011357134841227128
+ForwardTransfer: 0.4490480450989994
+Running experiment for nsl-kdd with LOFModel in scenario random_anomalies
+Time taken: 17.44 seconds
+ContinualAverage: 0.8640178535510904
+BackwardTransfer: -0.001266726259891444
+ForwardTransfer: 0.2403841648510812
+Running experiment for nsl-kdd with LOFModel in scenario clustered_with_closest_assignment
+Time taken: 13.99 seconds
+ContinualAverage: 0.8602350872150364
+BackwardTransfer: -0.013076751893497343
+ForwardTransfer: 0.38278136775740595
+Running experiment for nsl-kdd with LOFModel in scenario clustered_with_random_assignment
+Time taken: 13.96 seconds
+ContinualAverage: 0.8568737136721252
+BackwardTransfer: -0.011977098962907145
+ForwardTransfer: 0.4332877867320244
+Running experiment for unsw with FogMLLOFModel in scenario random_anomalies
+Time taken: 89.55 seconds
+ContinualAverage: 0.7042054199771146
+BackwardTransfer: -0.026056741298068918
+ForwardTransfer: 0.3184607611980813
+Running experiment for unsw with FogMLLOFModel in scenario clustered_with_closest_assignment
+Time taken: 76.16 seconds
+ContinualAverage: 0.7558814730259766
+BackwardTransfer: -0.017292024682759012
+ForwardTransfer: 0.27658472190132144
+Running experiment for unsw with FogMLLOFModel in scenario clustered_with_random_assignment
+Time taken: 76.20 seconds
+ContinualAverage: 0.7832082078446851
+BackwardTransfer: 0.005250990731634408
+ForwardTransfer: 0.29323479617323106
+Running experiment for unsw with LOFModel in scenario random_anomalies
+Time taken: 91.05 seconds
+ContinualAverage: 0.707419715566478
+BackwardTransfer: -0.02640337375368857
+ForwardTransfer: 0.34405102654261827
+Running experiment for unsw with LOFModel in scenario clustered_with_closest_assignment
+Time taken: 77.61 seconds
+ContinualAverage: 0.750078285057861
+BackwardTransfer: -0.02173946128640512
+ForwardTransfer: 0.3430661523108116
+Running experiment for unsw with LOFModel in scenario clustered_with_random_assignment
+Time taken: 77.46 seconds
+ContinualAverage: 0.8099050427948887
+BackwardTransfer: -0.0053892628995913525
+ForwardTransfer: 0.2994846863261631
+Running experiment for wind with FogMLLOFModel in scenario random_anomalies
+Time taken: 5.08 seconds
+ContinualAverage: 0.9714131682453833
+BackwardTransfer: -0.012585239324927134
+ForwardTransfer: 0.5326907195686271
+Running experiment for wind with FogMLLOFModel in scenario clustered_with_closest_assignment
+Time taken: 5.87 seconds
+ContinualAverage: 0.9448089456353899
+BackwardTransfer: -0.006772816031443354
+ForwardTransfer: 0.6650752821165328
+Running experiment for wind with FogMLLOFModel in scenario clustered_with_random_assignment
+Time taken: 5.03 seconds
+ContinualAverage: 0.963909072263731
+BackwardTransfer: -0.016980347972779475
+ForwardTransfer: 0.602773707777723
+Running experiment for wind with LOFModel in scenario random_anomalies
+Time taken: 5.77 seconds
+ContinualAverage: 0.9693544703330049
+BackwardTransfer: -0.015116199068180713
+ForwardTransfer: 0.5401705638836639
+Running experiment for wind with LOFModel in scenario clustered_with_closest_assignment
+Time taken: 7.40 seconds
+ContinualAverage: 0.9414662640682376
+BackwardTransfer: -0.0069122098817801575
+ForwardTransfer: 0.6656534914494496
+Running experiment for wind with LOFModel in scenario clustered_with_random_assignment
+Time taken: 5.66 seconds
+ContinualAverage: 0.9600342031286477
+BackwardTransfer: -0.02296510290443139
+ForwardTransfer: 0.583050603462542

@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{booktabs}
+
+\begin{document}
+
+\begin{table}[h!]
+    \centering
+    \caption{Experiment Results for Clustered with Closest Assignment}
+    \begin{tabular}{lcccc}
+        \toprule
+        Dataset & Model & Time (s) & ContinualAverage & BackwardTransfer & ForwardTransfer \\
+        \midrule
+        energy & FogMLLOFModel & 13.23 & 0.92 & -0.01 & 0.75 \\
+        energy & LOFModel & 18.05 & 0.93 & -0.01 & 0.76 \\
+        nsl-kdd & FogMLLOFModel & 12.22 & 0.89 & -0.01 & 0.38 \\
+        nsl-kdd & LOFModel & 13.99 & 0.86 & -0.01 & 0.38 \\
+        unsw & FogMLLOFModel & 76.16 & 0.76 & -0.02 & 0.28 \\
+        unsw & LOFModel & 77.61 & 0.75 & -0.02 & 0.34 \\
+        wind & FogMLLOFModel & 5.87 & 0.94 & -0.01 & 0.67 \\
+        wind & LOFModel & 7.40 & 0.94 & -0.01 & 0.67 \\
+        \bottomrule
