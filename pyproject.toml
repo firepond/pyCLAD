@@ -1,7 +1,7 @@
 [project]
 name = "pyclad"
 version = "0.1.0"
-description = "Add your description here"
+description = "pyclad modified with reservoir sampling"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
